@@ -87,7 +87,18 @@ function Get-OutputPath {
         $output = [IO.Path]::GetFullPath($env:TM_SVN_OUTPUT)
     }
     else {
-        $outputDirectory = Join-Path $env:TEMP "TableManager\SVN"
+        if ($env:TM_SVN_OUTPUT_DIR) {
+            $outputDirectory = [IO.Path]::GetFullPath($env:TM_SVN_OUTPUT_DIR)
+        }
+        else {
+            $workingParent = Split-Path -Parent $InputPaths[-1]
+            if ($workingParent -and (Test-Path -LiteralPath $workingParent -PathType Container)) {
+                $outputDirectory = Join-Path $workingParent ".temp"
+            }
+            else {
+                $outputDirectory = Join-Path $env:TEMP "TableManager\SVN"
+            }
+        }
         New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
         $sourceName = [IO.Path]::GetFileNameWithoutExtension($InputPaths[-1])
         $safeName = $sourceName -replace "[^A-Za-z0-9._-]", "_"

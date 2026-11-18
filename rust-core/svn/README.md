@@ -68,4 +68,5 @@ TABLE_CORE_SVN_DIR   指定包含 svn-diff.cmd / svn-merge.cmd 的目录
 TM_SVN_NO_OPEN=1     只生成文件，不打开 Excel
 TM_SVN_HEADLESS=1    无头模式；不打开 Excel，也不回退到外部工具
 TM_SVN_OUTPUT        指定 diff 输出文件，主要用于自动化测试
+TM_SVN_OUTPUT_DIR    指定 diff 输出目录；默认使用工作文件旁边的 .temp
 ```

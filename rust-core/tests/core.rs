@@ -283,7 +283,6 @@ fn svn_headless_wrappers_generate_diff_and_merge_files() {
     let base_path = directory.join("base.xlsx");
     let mine_path = directory.join("mine.xlsx");
     let theirs_path = directory.join("theirs.xlsx");
-    let diff_path = directory.join("diff.xlsx");
     let merge_path = directory.join("merged.xlsx");
     write_svn_fixture(&base_path, "Alpha");
     write_svn_fixture(&mine_path, "Ours");
@@ -302,11 +301,19 @@ fn svn_headless_wrappers_generate_diff_and_merge_files() {
         .env("TABLE_CORE_EXE", env!("CARGO_BIN_EXE_table-core"))
         .env("TM_SVN_HEADLESS", "1")
         .env("TM_SVN_NO_OPEN", "1")
-        .env("TM_SVN_OUTPUT", &diff_path)
         .status()
         .unwrap();
     assert!(diff.success());
-    assert!(diff_path.is_file());
+    let generated_diff = std::fs::read_dir(directory.join(".temp"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "xlsx")
+        })
+        .expect("default diff output next to source");
+    assert!(generated_diff.is_file());
 
     let merge = std::process::Command::new("powershell.exe")
         .args([
