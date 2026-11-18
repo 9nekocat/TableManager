@@ -1,24 +1,19 @@
-# Python 缓存
-__pycache__/
-*.py[cod]
-.pytest_cache/
-*.egg-info/
+# Rust
+rust-core/target/
+rust-core/dist/
 
-# 虚拟环境
+# Python leftovers
+__pycache__/
+.pytest_cache/
+*.py[cod]
 .venv/
 venv/
-rust-core/target/
 
-# 前端依赖与构建产物
-gui/node_modules/
-dist/
-build/
-
-# 编辑器与操作系统临时文件
+# Editors and OS files
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
 
-# 日志与临时文件
+# Logs
 *.log

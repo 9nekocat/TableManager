@@ -2,7 +2,7 @@
 name = "table-core-rs"
 version = "0.1.0"
 edition = "2024"
-description = "Read-only xlsx text snapshot, validation, and diff core for TableManager"
+description = "Excel table diff and three-way merge CLI for TableManager"
 license = "MIT"
 
 [lib]

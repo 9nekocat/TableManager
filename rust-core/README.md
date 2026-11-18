@@ -1,23 +1,20 @@
-# table-core-rs
+# TableManager
 
-无界面的 Rust 核心，供 CLI、Python GUI 或其他程序复用。
-
-职责：
-
-- 读取 `.xlsx` 的 `#` 数据页。
-- 把表冻结成纯文本快照，公式只取 Excel 缓存值。
-- 检查表头、RowName、Excel 错误值和公式风险。
-- 三路合并，支持 `fail`、`ours`、`theirs` 冲突策略。
-- 合并时保留简单公式，并按输出行列重绑定行内引用。
-- 输出类 Git 文本、JSON 或差异 Excel。
-- 输出合并 Excel，附带 Review/Conflicts/Changes/Issues 审查页。
-
-不包含 GUI、SVN、Excel COM 和原地事务写回。复杂外链、动态数组元数据和复杂格式保留仍复用现有 Python 链路。
+Rust Excel 配置表比对与三路合并命令行工具。
 
 ```powershell
-cargo build --release
-.\target\release\table-core.exe validate A:\DataTable\Raw\Effect.xlsx --json
-.\target\release\table-core.exe diff old.xlsx new.xlsx --format text
-.\target\release\table-core.exe diff old.xlsx new.xlsx --format excel --output diff.xlsx
-.\target\release\table-core.exe merge base.xlsx ours.xlsx theirs.xlsx --strategy fail --output merged.xlsx
+table-core.exe diff OLD NEW --format text
+table-core.exe diff OLD NEW --format json
+table-core.exe diff OLD NEW --format excel --output diff.xlsx
+table-core.exe merge BASE OURS THEIRS --strategy fail --output merged.xlsx
 ```
+
+主要行为：
+
+- 公式比对使用 Excel 缓存值。
+- 合并保留简单公式，并在行列变更后重绑定行内引用。
+- 默认冲突策略为 `fail`；未解决冲突返回退出码 `2`。
+- `--allow-conflicts` 写出 `_MergeConflicts`、`_MergeChanges` 和 `_MergeIssues` 审查页。
+- 复杂公式、重复表头、重复 RowName 和空行列会进入检查报告。
+
+SVN 配置见 [svn/README.md](svn/README.md)。

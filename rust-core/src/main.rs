@@ -13,7 +13,7 @@ use table_core::{diff_files, format_text_diff};
 #[command(
     name = "table-core",
     version,
-    about = "Rust xlsx text snapshot, validation, and diff core"
+    about = "Excel table diff and three-way merge"
 )]
 struct Cli {
     #[command(subcommand)]
