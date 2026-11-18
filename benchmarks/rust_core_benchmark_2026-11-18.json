@@ -1,0 +1,44 @@
+{
+  "date": "2026-11-18",
+  "rust_version": "rustc 1.100.0",
+  "build": "release",
+  "raw_root": "A:/DataTable/Raw",
+  "method": "5 runs, median; identical-file CLI diff and full-corpus load+validate+self-diff",
+  "results": {
+    "card_diff": {
+      "python_seconds": 4.285,
+      "rust_seconds": 0.394,
+      "speedup": 10.9
+    },
+    "effect_diff": {
+      "python_seconds": 2.065,
+      "rust_seconds": 0.334,
+      "speedup": 6.2
+    },
+    "corpus_scan": {
+      "valid_files": 36,
+      "python_seconds": 5.705,
+      "rust_seconds": 0.488,
+      "speedup": 11.7,
+      "rust_phases": {
+        "load_seconds": 0.264,
+        "validate_seconds": 0.106,
+        "diff_seconds": 0.098
+      }
+    },
+    "card_modified_diff": {
+      "changed_cells": 100,
+      "load_seconds": 0.104,
+      "diff_seconds": 0.022,
+      "text_seconds": 0.00006,
+      "excel_seconds": 0.002
+    },
+    "effect_modified_diff": {
+      "changed_cells": 100,
+      "load_seconds": 0.099,
+      "diff_seconds": 0.040,
+      "text_seconds": 0.00005,
+      "excel_seconds": 0.002
+    }
+  }
+}

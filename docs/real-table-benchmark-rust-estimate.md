@@ -1,25 +1,23 @@
-# A 盘真实配表 Benchmark 与 Rust 预估
+# A 盘真实配表 Benchmark 与 Rust 实测
 
 ## 结论
 
-当前 Python 核心已经是“表先转纯文本，再比较文本快照；公式只取 Excel 缓存值”的模型。
+Rust 只读核心已经落地到 `rust-core/`，采用“xlsx → 纯文本快照 → 校验/差异”流程，公式只取 Excel 缓存值。
 
 在 `A:/DataTable/Raw` 的真实表上：
 
 - 两个大表的端到端差异分别约 **4.28 秒（Card）** 和 **2.07 秒（Effect）**。
 - 纯文本差异本身约 **0.09 秒**，已不是瓶颈。
 - 主要成本是 xlsx 解包和构建模型：大表占用约 **80%**。
-- 全目录 36 个有效 xlsx（另发现 2 个 Excel `~$` 锁文件）的一遍加载、校验、自差异约 **5.71 秒**。
+- 全目录 36 个有效 xlsx 的一遍加载、校验、自差异：Python 约 **5.71 秒**。
 
-Rust 应优先替换 **xlsx 读取、校验和文本快照**，不需要重写 GUI/SVN/事务写回。按 Amdahl 估算：
+实际编译后的 Rust release 核心：
 
-- 全目录扫描：**约 3.0–6.6 倍**，中心估计 **4.6 倍**；`5.71s → 0.86–1.89s`。
-- Card 两文件差异：**约 3.0–6.6 倍**；`4.28s → 0.65–1.41s`，中心约 `0.93s`。
-- Effect 两文件差异：`2.07s → 0.31–0.68s`，中心约 `0.45s`。
-- Card 三路合并模型：中心预计 **3–4 倍**，`5.63s → 1.4–1.9s`。
-- 合并并生成 Excel：中心预计 **2.5–4 倍**，因为 OOXML 写出和压缩不可消除。
+- Card 两文件差异：`4.285s → 0.394s`，约 **10.9 倍**。
+- Effect 两文件差异：`2.065s → 0.334s`，约 **6.2 倍**。
+- 全目录扫描：`5.705s → 0.488s`，约 **11.7 倍**。
 
-这些是预估，不是已编译 Rust 的实测值。
+实测高于原先的中性预估；主要原因是 calamine 避免了 openpyxl 的完整对象树和外部链接对象构建。
 
 ## 测试环境与口径
 
@@ -30,6 +28,25 @@ Rust 应优先替换 **xlsx 读取、校验和文本快照**，不需要重写 G
 - 修改量：每张表 100 个单元格
 - 原始表只读；临时副本和输出均放在系统临时目录
 - 差异口径：先转为纯文本快照；公式只使用 Excel 缓存值；无缓存时按空值并警告
+
+## Rust 实测
+
+| 场景 | Python | Rust release | 提升 |
+| --- | ---: | ---: | ---: |
+| Card 两文件差异（CLI） | 4.285s | 0.394s | 10.9x |
+| Effect 两文件差异（CLI） | 2.065s | 0.334s | 6.2x |
+| 36 表加载+校验+自差异 | 5.705s | 0.488s | 11.7x |
+
+Rust 核心内部分段（Card，100 个单元格修改）：
+
+| 阶段 | 中位时间 |
+| --- | ---: |
+| xlsx 加载 | 0.104s |
+| 文本快照 + 差异 | 0.022s |
+| 文本格式化 | 0.00006s |
+| 差异 Excel 写出 | 0.002s |
+
+Effect 的文本差异约 0.040s，差异 Excel 写出约 0.002s。
 
 ## 代表性大表
 
@@ -67,7 +84,7 @@ Rust 应优先替换 **xlsx 读取、校验和文本快照**，不需要重写 G
 | 自差异 | 0.608s | 10.7% |
 | 合计 | 5.705s | 100% |
 
-## Rust 预估方法
+## 当时的 Rust 预估方法
 
 使用测得的阶段占比和 Amdahl 定律：
 
@@ -83,16 +100,16 @@ Rust 应优先替换 **xlsx 读取、校验和文本快照**，不需要重写 G
 | 中性 | 5x | 8x | 10x | 4.6x，约 1.24s |
 | 乐观 | 8x | 15x | 20x | 6.6x，约 0.86s |
 
-这组阶段加速比基于当前剖析结果：
+这组阶段加速比基于 Python 剖析结果：
 
 - Python/openpyxl 在构建对象树、解析外部链接、创建每个单元格对象上花费大量时间。
 - ZIP 解压和原始文件读取很小；Card 的原始字节读取中位数不足 1ms。
 - Rust 若使用 `calamine`/`quick-xml` 直接构建轻量文本模型，避免 openpyxl 的完整对象图和外部链接对象树，加载阶段获得 5 倍左右提升是合理中心值。
 - 若 Rust 只是通过 FFI 调用 openpyxl，或者仍构造同样复杂的对象模型，预计只有 1.2–1.8 倍，不值得。
 
-## 建议的最小 Rust 边界
+## 已落地的最小 Rust 边界
 
-优先实现一个只读 Rust 核心：
+已实现一个只读 Rust 核心和极简 CLI：
 
 ```text
 xlsx → 文本快照 → 校验结果 + 差异结果（JSON/类 Git 文本）
@@ -107,6 +124,15 @@ xlsx → 文本快照 → 校验结果 + 差异结果（JSON/类 Git 文本）
 
 这样收益最大、风险最小。
 
+构建与使用：
+
+```powershell
+cargo build --release --manifest-path rust-core/Cargo.toml
+rust-core/target/release/table-core.exe validate <file.xlsx> --json
+rust-core/target/release/table-core.exe diff <old.xlsx> <new.xlsx> --format text
+rust-core/target/release/table-core.exe diff <old.xlsx> <new.xlsx> --format excel --output diff.xlsx
+```
+
 ## 不应过度承诺的场景
 
 - A 盘冷启动、网络抖动、杀毒软件扫描可能主导时间，Rust 无法消除。
@@ -118,3 +144,4 @@ xlsx → 文本快照 → 校验结果 + 差异结果（JSON/类 Git 文本）
 
 - [代表性表 Benchmark](D:/Project/TableManager-refactor/benchmarks/real_table_benchmark_2026-11-18.json)
 - [全目录 Benchmark](D:/Project/TableManager-refactor/benchmarks/corpus_benchmark_2026-11-18.json)
+- [Rust 实测](D:/Project/TableManager-refactor/benchmarks/rust_core_benchmark_2026-11-18.json)
