@@ -93,6 +93,22 @@ rust-core\target\release\table-core.exe merge base.xlsx ours.xlsx theirs.xlsx --
 
 `--strategy fail` 遇到冲突不会写盘；需要查看冲突预览时可加 `--allow-conflicts`。使用 `ours` 或 `theirs` 时，冲突会按指定一侧解决并写入审查报告。
 
+### SVN 比对与合并
+
+仓库内的 `rust-core/svn` 提供可直接配置到 SVN 命令行和 TortoiseSVN 的包装脚本。`.xlsx`、`.xlsm`、`.xlsb`、`.xls` 使用 Rust 表核心，其他文件沿用 xlCompare。
+
+```ini
+[helpers]
+diff-cmd = D:/Project/TableManager-refactor/rust-core/svn/svn-diff.cmd
+diff-extensions =
+merge-tool-cmd = D:/Project/TableManager-refactor/rust-core/svn/svn-merge.cmd
+
+[miscellany]
+diff-ignore-content-type = yes
+```
+
+完整配置方式见 [rust-core/svn/README.md](rust-core/svn/README.md)。
+
 ## 配置
 
 ### 项目根目录

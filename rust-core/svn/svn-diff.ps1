@@ -1,0 +1,133 @@
+$ErrorActionPreference = "Stop"
+$SvnArgs = @($args)
+
+function Get-TableCorePath {
+    if ($env:TABLE_CORE_EXE -and (Test-Path -LiteralPath $env:TABLE_CORE_EXE -PathType Leaf)) {
+        return (Resolve-Path -LiteralPath $env:TABLE_CORE_EXE).Path
+    }
+
+    $candidates = @(
+        (Join-Path $PSScriptRoot "..\target\release\table-core.exe"),
+        (Join-Path $PSScriptRoot "..\target\debug\table-core.exe"),
+        (Join-Path $PSScriptRoot "..\table-core.exe"),
+        (Join-Path $PSScriptRoot "table-core.exe")
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+    throw "table-core.exe not found. Build it with: cargo build --release --manifest-path rust-core/Cargo.toml"
+}
+
+function Test-ExcelWorkbook {
+    param([string] $Path)
+
+    if (!(Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $false
+    }
+
+    $name = [IO.Path]::GetFileName($Path)
+    if ($name -match "(?i)\.(xlsx|xlsm|xlsb|xls)(?:\.(mine|theirs|base|working|r?\d+))?$") {
+        return $true
+    }
+
+    try {
+        $stream = [IO.File]::OpenRead($Path)
+        try {
+            if ($stream.Length -lt 4) {
+                return $false
+            }
+            $signature = New-Object byte[] 4
+            [void] $stream.Read($signature, 0, 4)
+            if ($signature[0] -eq 0x50 -and $signature[1] -eq 0x4B) {
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                $archive = [IO.Compression.ZipFile]::OpenRead($Path)
+                try {
+                    return [bool] ($archive.Entries | Where-Object {
+                        $_.FullName -like "xl/*"
+                    } | Select-Object -First 1)
+                }
+                finally {
+                    $archive.Dispose()
+                }
+            }
+            return $false
+        }
+        finally {
+            $stream.Dispose()
+        }
+    }
+    catch {
+        return $false
+    }
+}
+
+function Get-OutputPath {
+    param([string[]] $InputPaths)
+
+    if ($env:TM_SVN_OUTPUT) {
+        $output = [IO.Path]::GetFullPath($env:TM_SVN_OUTPUT)
+    }
+    else {
+        $outputDirectory = Join-Path $env:TEMP "TableManager\SVN"
+        New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+        $sourceName = [IO.Path]::GetFileNameWithoutExtension($InputPaths[-1])
+        $safeName = $sourceName -replace "[^A-Za-z0-9._-]", "_"
+        $output = Join-Path $outputDirectory (
+            "diff-{0}-{1}-{2}.xlsx" -f $safeName, (Get-Date -Format "yyyyMMdd-HHmmss"), $PID
+        )
+    }
+
+    $parent = Split-Path -Parent $output
+    if ($parent) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+    return $output
+}
+
+function Open-ReviewFile {
+    param([string] $Path)
+
+    if ($env:TM_SVN_NO_OPEN -ne "1") {
+        Start-Process -FilePath $Path | Out-Null
+    }
+}
+
+function Invoke-XlCompareDiff {
+    param([string] $OldPath, [string] $NewPath)
+
+    $xlCompare = Join-Path $env:LOCALAPPDATA "Spreadsheet Tools\xlCompare\xlCompare.exe"
+    if (!(Test-Path -LiteralPath $xlCompare -PathType Leaf)) {
+        throw "Neither an Excel workbook nor xlCompare was found."
+    }
+    & $xlCompare $OldPath $NewPath -quit_on_close -titleMine:WORKING -titleBase:BASE
+    exit $LASTEXITCODE
+}
+
+if ($SvnArgs.Count -lt 2) {
+    [Console]::Error.WriteLine("SVN diff requires two file paths.")
+    exit 2
+}
+
+$oldPath = [IO.Path]::GetFullPath($SvnArgs[-2])
+$newPath = [IO.Path]::GetFullPath($SvnArgs[-1])
+if (!(Test-ExcelWorkbook $oldPath) -or !(Test-ExcelWorkbook $newPath)) {
+    Invoke-XlCompareDiff $oldPath $newPath
+}
+
+$tableCore = Get-TableCorePath
+$output = Get-OutputPath @($oldPath, $newPath)
+& $tableCore diff $oldPath $newPath --format excel --output $output
+$exitCode = $LASTEXITCODE
+
+if (!(Test-Path -LiteralPath $output -PathType Leaf) -or (Get-Item -LiteralPath $output).Length -eq 0) {
+    [Console]::Error.WriteLine("Table diff did not generate an Excel report: $output")
+    exit 2
+}
+
+Open-ReviewFile $output
+if ($exitCode -eq 0 -or $exitCode -eq 1) {
+    exit 0
+}
+exit $exitCode
