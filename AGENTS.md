@@ -159,6 +159,11 @@ svn/configure-tortoisesvn.ps1
 Subversion 修改前保留 `config.table-core.bak`；TortoiseSVN 注册表备份到
 `%LOCALAPPDATA%\CatsInTheShell\TableManager\backup`。无头调用使用：
 
+SVN diff 输出目录由用户级
+`%LOCALAPPDATA%\CatsInTheShell\TableManager\config\svn-wrapper.json` 管理，并以发布包中的
+`config/svn-wrapper.json` 作为默认模板：优先使用 `diff_output_dir`，写入失败时回退到
+`fallback_diff_output_dir`，并可按 `remember_output_dir` 记忆成功路径。
+
 ```text
 svn/svn-diff-headless.cmd
 svn/svn-merge-headless.cmd

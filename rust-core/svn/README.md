@@ -69,4 +69,25 @@ TM_SVN_NO_OPEN=1     只生成文件，不打开 Excel
 TM_SVN_HEADLESS=1    无头模式；不打开 Excel，也不回退到外部工具
 TM_SVN_OUTPUT        指定 diff 输出文件，主要用于自动化测试
 TM_SVN_OUTPUT_DIR    指定 diff 输出目录；默认使用工作文件旁边的 .temp
+TM_SVN_CONFIG        指定包装器配置文件；默认使用用户级 config\svn-wrapper.json
 ```
+
+发布包中的 `config\svn-wrapper.json` 是默认模板。实际记忆路径为：
+
+```text
+%LOCALAPPDATA%\CatsInTheShell\TableManager\config\svn-wrapper.json
+```
+
+配置文件控制输出策略：
+
+```json
+{
+  "diff_output_dir": "%TEMP%\\TableManager\\SVN",
+  "fallback_diff_output_dir": "${SOURCE_DIR}\\.temp",
+  "remember_output_dir": true
+}
+```
+
+首选目录写入失败时会自动尝试回退目录。`remember_output_dir` 为 `true` 时，成功的
+回退路径会写回配置，后续比对直接使用该路径。`${SOURCE_DIR}` 表示当前被比对工作表
+所在目录。也可以把 `diff_output_dir` 改为任意绝对路径。

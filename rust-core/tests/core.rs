@@ -283,7 +283,13 @@ fn svn_headless_wrappers_generate_diff_and_merge_files() {
     let base_path = directory.join("base.xlsx");
     let mine_path = directory.join("mine.xlsx");
     let theirs_path = directory.join("theirs.xlsx");
+    let wrapper_config = directory.join("svn-wrapper.json");
     let merge_path = directory.join("merged.xlsx");
+    std::fs::write(
+        &wrapper_config,
+        r#"{"diff_output_dir":"%TEMP%\\TableManager\\SVN","fallback_diff_output_dir":"${SOURCE_DIR}\\.temp","remember_output_dir":true}"#,
+    )
+    .unwrap();
     write_svn_fixture(&base_path, "Alpha");
     write_svn_fixture(&mine_path, "Ours");
     write_svn_fixture(&theirs_path, "Theirs");
@@ -299,6 +305,7 @@ fn svn_headless_wrappers_generate_diff_and_merge_files() {
         .arg(&base_path)
         .arg(&mine_path)
         .env("TABLE_CORE_EXE", env!("CARGO_BIN_EXE_table-core"))
+        .env("TM_SVN_CONFIG", &wrapper_config)
         .env("TM_SVN_HEADLESS", "1")
         .env("TM_SVN_NO_OPEN", "1")
         .status()
@@ -314,6 +321,12 @@ fn svn_headless_wrappers_generate_diff_and_merge_files() {
         })
         .expect("default diff output next to source");
     assert!(generated_diff.is_file());
+    let remembered: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&wrapper_config).unwrap()).unwrap();
+    assert_eq!(
+        remembered["diff_output_dir"].as_str(),
+        Some(r"${SOURCE_DIR}\.temp")
+    );
 
     let merge = std::process::Command::new("powershell.exe")
         .args([

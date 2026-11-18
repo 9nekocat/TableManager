@@ -1,0 +1,5 @@
+{
+  "diff_output_dir": "%TEMP%\\TableManager\\SVN",
+  "fallback_diff_output_dir": "${SOURCE_DIR}\\.temp",
+  "remember_output_dir": true
+}

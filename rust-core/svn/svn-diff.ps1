@@ -10,6 +10,70 @@ foreach ($argument in @($args)) {
     }
 }
 
+$ShippedConfigPath = Join-Path $PSScriptRoot "..\config\svn-wrapper.json"
+$WrapperConfigPath = if ($env:TM_SVN_CONFIG) {
+    [IO.Path]::GetFullPath($env:TM_SVN_CONFIG)
+}
+else {
+    Join-Path $env:LOCALAPPDATA "CatsInTheShell\TableManager\config\svn-wrapper.json"
+}
+
+function Get-WrapperConfig {
+    $config = [pscustomobject]@{
+        diff_output_dir = "%TEMP%\TableManager\SVN"
+        fallback_diff_output_dir = '${SOURCE_DIR}\.temp'
+        remember_output_dir = $true
+    }
+    $sourceConfigPath = if (Test-Path -LiteralPath $WrapperConfigPath -PathType Leaf) {
+        $WrapperConfigPath
+    }
+    elseif (Test-Path -LiteralPath $ShippedConfigPath -PathType Leaf) {
+        $ShippedConfigPath
+    }
+    else {
+        $null
+    }
+    if ($sourceConfigPath) {
+        try {
+            $loaded = Get-Content -LiteralPath $sourceConfigPath -Raw | ConvertFrom-Json
+            foreach ($name in @("diff_output_dir", "fallback_diff_output_dir", "remember_output_dir")) {
+                if ($null -ne $loaded.$name) {
+                    $config.$name = $loaded.$name
+                }
+            }
+        }
+        catch {
+            [Console]::Error.WriteLine(
+                "Cannot read SVN wrapper config '$WrapperConfigPath': $($_.Exception.Message)"
+            )
+        }
+    }
+    return $config
+}
+
+function Save-WrapperConfig {
+    param([object] $Config)
+    try {
+        $parent = Split-Path -Parent $WrapperConfigPath
+        if ($parent) {
+            New-Item -ItemType Directory -Path $parent -Force | Out-Null
+        }
+        $json = $Config | ConvertTo-Json -Depth 4
+        [IO.File]::WriteAllText(
+            $WrapperConfigPath,
+            $json,
+            (New-Object System.Text.UTF8Encoding($false))
+        )
+        return $true
+    }
+    catch {
+        [Console]::Error.WriteLine(
+            "Cannot save SVN wrapper config '$WrapperConfigPath': $($_.Exception.Message)"
+        )
+        return $false
+    }
+}
+
 function Get-TableCorePath {
     if ($env:TABLE_CORE_EXE -and (Test-Path -LiteralPath $env:TABLE_CORE_EXE -PathType Leaf)) {
         return (Resolve-Path -LiteralPath $env:TABLE_CORE_EXE).Path
@@ -80,38 +144,27 @@ function Test-ExcelWorkbook {
     }
 }
 
+function Resolve-OutputDirectory {
+    param([string] $Template, [string] $SourcePath)
+
+    $sourceDirectory = Split-Path -Parent $SourcePath
+    $resolved = $Template.Replace('${SOURCE_DIR}', $sourceDirectory)
+    $resolved = [Environment]::ExpandEnvironmentVariables($resolved)
+    if (![IO.Path]::IsPathRooted($resolved)) {
+        $resolved = Join-Path $sourceDirectory $resolved
+    }
+    return [IO.Path]::GetFullPath($resolved)
+}
+
 function Get-OutputPath {
-    param([string[]] $InputPaths)
+    param([string] $OutputDirectory, [string] $SourcePath)
 
-    if ($env:TM_SVN_OUTPUT) {
-        $output = [IO.Path]::GetFullPath($env:TM_SVN_OUTPUT)
-    }
-    else {
-        if ($env:TM_SVN_OUTPUT_DIR) {
-            $outputDirectory = [IO.Path]::GetFullPath($env:TM_SVN_OUTPUT_DIR)
-        }
-        else {
-            $workingParent = Split-Path -Parent $InputPaths[-1]
-            if ($workingParent -and (Test-Path -LiteralPath $workingParent -PathType Container)) {
-                $outputDirectory = Join-Path $workingParent ".temp"
-            }
-            else {
-                $outputDirectory = Join-Path $env:TEMP "TableManager\SVN"
-            }
-        }
-        New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
-        $sourceName = [IO.Path]::GetFileNameWithoutExtension($InputPaths[-1])
-        $safeName = $sourceName -replace "[^A-Za-z0-9._-]", "_"
-        $output = Join-Path $outputDirectory (
-            "diff-{0}-{1}-{2}.xlsx" -f $safeName, (Get-Date -Format "yyyyMMdd-HHmmss"), $PID
-        )
-    }
-
-    $parent = Split-Path -Parent $output
-    if ($parent) {
-        New-Item -ItemType Directory -Path $parent -Force | Out-Null
-    }
-    return $output
+    New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+    $sourceName = [IO.Path]::GetFileNameWithoutExtension($SourcePath)
+    $safeName = $sourceName -replace "[^A-Za-z0-9._-]", "_"
+    return Join-Path $OutputDirectory (
+        "diff-{0}-{1}-{2}.xlsx" -f $safeName, (Get-Date -Format "yyyyMMdd-HHmmss"), $PID
+    )
 }
 
 function Open-ReviewFile {
@@ -151,13 +204,77 @@ if (!(Test-ExcelWorkbook $oldPath) -or !(Test-ExcelWorkbook $newPath)) {
 }
 
 $tableCore = Get-TableCorePath
-$output = Get-OutputPath @($oldPath, $newPath)
-& $tableCore diff $oldPath $newPath --format excel --layout arranged --output $output
-$exitCode = $LASTEXITCODE
+$config = Get-WrapperConfig
+$candidates = @()
+if ($env:TM_SVN_OUTPUT) {
+    $candidates += [pscustomobject]@{
+        Template = $null
+        ExactPath = [IO.Path]::GetFullPath($env:TM_SVN_OUTPUT)
+        Remember = $false
+    }
+}
+else {
+    $primaryTemplate = if ($env:TM_SVN_OUTPUT_DIR) {
+        [IO.Path]::GetFullPath($env:TM_SVN_OUTPUT_DIR)
+    }
+    else {
+        [string] $config.diff_output_dir
+    }
+    $fallbackTemplate = [string] $config.fallback_diff_output_dir
+    $candidates += [pscustomobject]@{
+        Template = $primaryTemplate
+        ExactPath = $null
+        Remember = (-not [bool] $env:TM_SVN_OUTPUT_DIR)
+    }
+    if ($fallbackTemplate -and $fallbackTemplate -ne $primaryTemplate) {
+        $candidates += [pscustomobject]@{
+            Template = $fallbackTemplate
+            ExactPath = $null
+            Remember = $true
+        }
+    }
+}
 
-if (!(Test-Path -LiteralPath $output -PathType Leaf) -or (Get-Item -LiteralPath $output).Length -eq 0) {
-    [Console]::Error.WriteLine("Table diff did not generate an Excel report: $output")
+$output = $null
+$exitCode = 2
+$usedCandidate = $null
+foreach ($candidate in $candidates) {
+    $output = if ($candidate.ExactPath) {
+        $candidate.ExactPath
+    }
+    else {
+        $outputDirectory = Resolve-OutputDirectory $candidate.Template $newPath
+        Get-OutputPath $outputDirectory $newPath
+    }
+    $outputParent = Split-Path -Parent $output
+    if ($outputParent) {
+        New-Item -ItemType Directory -Path $outputParent -Force | Out-Null
+    }
+    & $tableCore diff $oldPath $newPath --format excel --layout arranged --output $output
+    $exitCode = $LASTEXITCODE
+    if (
+        (Test-Path -LiteralPath $output -PathType Leaf) -and
+        (Get-Item -LiteralPath $output).Length -gt 0
+    ) {
+        $usedCandidate = $candidate
+        break
+    }
+    [Console]::Error.WriteLine("Diff output failed, trying fallback directory: $output")
+}
+
+if (!$usedCandidate) {
+    [Console]::Error.WriteLine("Table diff did not generate an Excel report.")
     exit 2
+}
+
+if (
+    $usedCandidate.Remember -and
+    $usedCandidate.Template -and
+    [bool] $config.remember_output_dir -and
+    $usedCandidate.Template -ne $config.diff_output_dir
+) {
+    $config.diff_output_dir = $usedCandidate.Template
+    [void] (Save-WrapperConfig $config)
 }
 
 Open-ReviewFile $output
