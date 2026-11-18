@@ -92,7 +92,27 @@ if ($configureScripts.Count -lt 2) {
     throw "Release package is missing one or more configure-svn*.bat entry points"
 }
 
-Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $archive -CompressionLevel Optimal
+$compressed = $false
+for ($attempt = 1; $attempt -le 10; $attempt++) {
+    try {
+        if (Test-Path -LiteralPath $archive) {
+            Remove-Item -LiteralPath $archive -Force
+        }
+        Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $archive `
+            -CompressionLevel Optimal -ErrorAction Stop
+        $compressed = $true
+        break
+    }
+    catch {
+        if ($attempt -eq 10) {
+            throw
+        }
+        Start-Sleep -Milliseconds 500
+    }
+}
+if (!$compressed) {
+    throw "Failed to create release archive"
+}
 $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
 Set-Content -LiteralPath $checksum -Value "$hash  $packageName.zip" -Encoding ascii
 

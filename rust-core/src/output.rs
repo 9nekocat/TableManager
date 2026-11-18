@@ -1,3 +1,4 @@
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 use rust_xlsxwriter::{Color, Format, Workbook as XlsxWorkbook};
@@ -8,8 +9,19 @@ use crate::localization::DiffReportLabels;
 use crate::merge::MergeResult;
 use crate::model::DATA_START_ROW;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiffExcelLayout {
+    Compact,
+    Arranged,
+}
+
 pub fn write_diff_excel(result: &DiffResult, output_path: impl AsRef<Path>) -> Result<()> {
-    write_diff_excel_with_labels(result, output_path, &DiffReportLabels::default())
+    write_diff_excel_with_layout(
+        result,
+        output_path,
+        &DiffReportLabels::default(),
+        DiffExcelLayout::Arranged,
+    )
 }
 
 pub fn write_diff_excel_with_labels(
@@ -17,6 +29,18 @@ pub fn write_diff_excel_with_labels(
     output_path: impl AsRef<Path>,
     labels: &DiffReportLabels,
 ) -> Result<()> {
+    write_diff_excel_with_layout(result, output_path, labels, DiffExcelLayout::Arranged)
+}
+
+pub fn write_diff_excel_with_layout(
+    result: &DiffResult,
+    output_path: impl AsRef<Path>,
+    labels: &DiffReportLabels,
+    layout: DiffExcelLayout,
+) -> Result<()> {
+    if layout == DiffExcelLayout::Arranged {
+        return write_arranged_diff_excel(result, output_path, labels);
+    }
     let mut workbook = XlsxWorkbook::new();
     let header_format = Format::new()
         .set_bold()
@@ -141,6 +165,382 @@ pub fn write_diff_excel_with_labels(
     }
     workbook.save(output_path)?;
     Ok(())
+}
+
+fn write_arranged_diff_excel(
+    result: &DiffResult,
+    output_path: impl AsRef<Path>,
+    labels: &DiffReportLabels,
+) -> Result<()> {
+    let mut workbook = XlsxWorkbook::new();
+    let header_format = Format::new()
+        .set_bold()
+        .set_font_color(Color::White)
+        .set_background_color("#4472C4");
+    let title_format = Format::new()
+        .set_bold()
+        .set_font_size(16)
+        .set_font_color("#1F3864");
+    let section_format = Format::new()
+        .set_bold()
+        .set_font_color(Color::White)
+        .set_background_color("#5B9BD5");
+    let summary_label_format = Format::new()
+        .set_bold()
+        .set_background_color("#D9EAF7")
+        .set_text_wrap();
+    let body_format = Format::new()
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let added_format = Format::new()
+        .set_background_color("#E2F0D9")
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let deleted_format = Format::new()
+        .set_background_color("#FCE4D6")
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let old_format = Format::new()
+        .set_background_color("#FFF2CC")
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let new_format = Format::new()
+        .set_background_color("#DDEBF7")
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let old_changed_format = Format::new()
+        .set_background_color("#FFF2CC")
+        .set_font_color("#C00000")
+        .set_bold()
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let new_changed_format = Format::new()
+        .set_background_color("#DDEBF7")
+        .set_font_color("#006100")
+        .set_bold()
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let column_format = Format::new()
+        .set_background_color("#EADCF8")
+        .set_font_color("#5A2D82")
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let issue_error_format = Format::new()
+        .set_background_color("#FFC7CE")
+        .set_text_wrap();
+
+    let mut used_sheet_names = HashSet::new();
+    let changed_sheets = result
+        .sheets
+        .iter()
+        .filter(|sheet| sheet.has_changes())
+        .collect::<Vec<_>>();
+    for sheet in &changed_sheets {
+        let sheet_name = unique_sheet_name(&sheet.sheet, &mut used_sheet_names);
+        let worksheet = workbook.add_worksheet();
+        worksheet.set_name(&sheet_name)?;
+        write_arranged_sheet(
+            worksheet,
+            sheet,
+            labels,
+            &header_format,
+            &body_format,
+            &added_format,
+            &deleted_format,
+            &old_format,
+            &new_format,
+            &old_changed_format,
+            &new_changed_format,
+            &column_format,
+        )?;
+    }
+
+    let report_name = unique_sheet_name(&labels.report_title, &mut used_sheet_names);
+    let report = workbook.add_worksheet();
+    report.set_name(&report_name)?;
+    let mut output_row = write_diff_summary(
+        report,
+        0,
+        result,
+        labels,
+        &title_format,
+        &header_format,
+        &summary_label_format,
+        &body_format,
+    )?;
+    if changed_sheets.is_empty() {
+        report.write_string_with_format(output_row, 0, &labels.no_differences, &section_format)?;
+        output_row += 2;
+    }
+    if !result.issues.is_empty() {
+        write_arranged_issue_section(
+            report,
+            output_row,
+            result,
+            labels,
+            &header_format,
+            &section_format,
+            &body_format,
+            &issue_error_format,
+        )?;
+    }
+    report.set_column_width(0, 14)?;
+    report.set_column_width(1, 28)?;
+    report.set_column_width(2, 18)?;
+    report.set_column_width(3, 14)?;
+    report.set_column_width(4, 24)?;
+    report.set_column_width(5, 70)?;
+    report.set_column_width(6, 30)?;
+    workbook.save(output_path)?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_arranged_sheet(
+    worksheet: &mut rust_xlsxwriter::Worksheet,
+    sheet: &SheetDiff,
+    labels: &DiffReportLabels,
+    header_format: &Format,
+    body_format: &Format,
+    added_format: &Format,
+    deleted_format: &Format,
+    old_format: &Format,
+    new_format: &Format,
+    old_changed_format: &Format,
+    new_changed_format: &Format,
+    column_format: &Format,
+) -> Result<()> {
+    let columns = &sheet.column_alignments;
+    worksheet.write_string_with_format(0, 0, &labels.chinese_header, header_format)?;
+    worksheet.write_string_with_format(1, 0, &labels.english_header, header_format)?;
+    worksheet.write_string_with_format(2, 0, &labels.field_type, header_format)?;
+    for (index, column) in columns.iter().enumerate() {
+        let header = column
+            .new_header
+            .as_ref()
+            .or(column.old_header.as_ref())
+            .cloned()
+            .unwrap_or_default();
+        write_blank_or_string(worksheet, 0, index as u16 + 1, &header.cn, header_format)?;
+        write_blank_or_string(worksheet, 1, index as u16 + 1, &header.en, header_format)?;
+        write_blank_or_string(
+            worksheet,
+            2,
+            index as u16 + 1,
+            &header.type_name,
+            header_format,
+        )?;
+    }
+    worksheet.set_column_width(0, 18)?;
+    for column in 0..columns.len() {
+        worksheet.set_column_width(column as u16 + 1, 22)?;
+    }
+    worksheet.set_freeze_panes(4, 1)?;
+
+    let mut row = 4u32;
+    for change in &sheet.column_changes {
+        row = write_column_change(worksheet, row, sheet, change, labels, column_format)?;
+    }
+    if !sheet.column_changes.is_empty() && !sheet.row_changes.is_empty() {
+        row += 1;
+    }
+    for change in &sheet.row_changes {
+        row = write_row_change(
+            worksheet,
+            row,
+            sheet,
+            change,
+            labels,
+            body_format,
+            added_format,
+            deleted_format,
+            old_format,
+            new_format,
+            old_changed_format,
+            new_changed_format,
+        )?;
+        row += 1;
+    }
+    Ok(())
+}
+
+struct ArrangedIssueRow {
+    severity: String,
+    code: String,
+    sheet: String,
+    row: String,
+    column: String,
+    message: String,
+    reference: String,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_arranged_issue_section(
+    worksheet: &mut rust_xlsxwriter::Worksheet,
+    row: u32,
+    result: &DiffResult,
+    labels: &DiffReportLabels,
+    header_format: &Format,
+    section_format: &Format,
+    body_format: &Format,
+    error_format: &Format,
+) -> Result<()> {
+    worksheet.write_string_with_format(row, 0, &labels.issues, section_format)?;
+    let mut output_row = row + 1;
+    for (column, label) in [
+        &labels.severity,
+        &labels.code,
+        &labels.sheet,
+        &labels.row,
+        &labels.column,
+        &labels.message,
+        &labels.reference,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        worksheet.write_string_with_format(output_row, column as u16, label, header_format)?;
+    }
+    output_row += 1;
+
+    for issue in arranged_issues(result, labels) {
+        let format = if issue.severity == labels.error {
+            error_format
+        } else {
+            body_format
+        };
+        let values = [
+            issue.severity.as_str(),
+            issue.code.as_str(),
+            issue.sheet.as_str(),
+            issue.row.as_str(),
+            issue.column.as_str(),
+            issue.message.as_str(),
+            issue.reference.as_str(),
+        ];
+        for (column, value) in values.into_iter().enumerate() {
+            write_blank_or_string(worksheet, output_row, column as u16, value, format)?;
+        }
+        output_row += 1;
+    }
+    Ok(())
+}
+
+fn arranged_issues(result: &DiffResult, labels: &DiffReportLabels) -> Vec<ArrangedIssueRow> {
+    let mut blank_rows = BTreeMap::<String, Vec<usize>>::new();
+    let mut issues = Vec::new();
+    let mut seen = HashSet::new();
+    for issue in &result.issues {
+        if issue.code == "blank_row_removed"
+            && let Some(row) = issue.row
+        {
+            blank_rows
+                .entry(issue.sheet.clone().unwrap_or_default())
+                .or_default()
+                .push(row);
+            continue;
+        }
+        let key = format!(
+            "{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}",
+            issue.severity,
+            issue.code,
+            issue.sheet.as_deref().unwrap_or(""),
+            issue.row.unwrap_or_default(),
+            issue.column.as_deref().unwrap_or(""),
+            issue.message,
+            issue.reference.as_deref().unwrap_or("")
+        );
+        if !seen.insert(key) {
+            continue;
+        }
+        let severity = match issue.severity.as_str() {
+            "error" => labels.error.clone(),
+            "warning" => labels.warning.clone(),
+            _ => labels.info.clone(),
+        };
+        issues.push(ArrangedIssueRow {
+            severity,
+            code: issue.code.clone(),
+            sheet: issue.sheet.clone().unwrap_or_default(),
+            row: issue.row.map(|value| value.to_string()).unwrap_or_default(),
+            column: issue.column.clone().unwrap_or_default(),
+            message: issue.message.clone(),
+            reference: issue.reference.clone().unwrap_or_default(),
+        });
+    }
+    for (sheet, rows) in blank_rows {
+        let count = rows.len();
+        issues.push(ArrangedIssueRow {
+            severity: labels.warning.clone(),
+            code: "blank_row_removed".to_string(),
+            sheet,
+            row: format_row_ranges(rows),
+            column: String::new(),
+            message: labels
+                .blank_rows_removed_group
+                .replace("{count}", &count.to_string()),
+            reference: String::new(),
+        });
+    }
+    issues.sort_by_key(|issue| {
+        let severity = if issue.severity == labels.error { 0 } else { 1 };
+        (severity, issue.sheet.clone(), issue.code.clone())
+    });
+    issues
+}
+
+fn format_row_ranges(mut rows: Vec<usize>) -> String {
+    rows.sort_unstable();
+    rows.dedup();
+    let mut ranges = Vec::new();
+    let mut start = None;
+    let mut end = 0usize;
+    for row in rows {
+        match start {
+            None => {
+                start = Some(row);
+                end = row;
+            }
+            Some(_) if row == end + 1 => {
+                end = row;
+            }
+            Some(value) => {
+                ranges.push(if value == end {
+                    value.to_string()
+                } else {
+                    format!("{value}-{end}")
+                });
+                start = Some(row);
+                end = row;
+            }
+        }
+    }
+    if let Some(value) = start {
+        ranges.push(if value == end {
+            value.to_string()
+        } else {
+            format!("{value}-{end}")
+        });
+    }
+    ranges.join(", ")
+}
+
+fn unique_sheet_name(requested: &str, used: &mut HashSet<String>) -> String {
+    let base = safe_report_sheet_name(requested);
+    let mut candidate = base.clone();
+    let mut suffix = 2usize;
+    while used.contains(&candidate.to_ascii_lowercase()) {
+        let suffix_text = format!(" ({suffix})");
+        let keep = 31usize.saturating_sub(suffix_text.chars().count());
+        candidate = format!(
+            "{}{}",
+            base.chars().take(keep).collect::<String>(),
+            suffix_text
+        );
+        suffix += 1;
+    }
+    used.insert(candidate.to_ascii_lowercase());
+    candidate
 }
 
 #[allow(clippy::too_many_arguments)]

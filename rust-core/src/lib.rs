@@ -20,5 +20,6 @@ pub use merge::{
     merge_workbooks,
 };
 pub use model::{Cell, Header, Issue, Row, Sheet, Workbook};
+pub use output::DiffExcelLayout;
 pub use snapshot::{TextRow, TextSheet, TextWorkbook, workbook_to_text};
 pub use svn_integration::{SvnInstallResult, install_svn_integration};

@@ -7,7 +7,7 @@ use table_core::error::Result;
 use table_core::localization::DiffReportLabels;
 use table_core::merge::{MergeStrategy, format_merge_text, merge_files};
 use table_core::model::read_workbook;
-use table_core::output::{write_diff_excel_with_labels, write_merge_excel};
+use table_core::output::{DiffExcelLayout, write_diff_excel_with_layout, write_merge_excel};
 use table_core::svn_integration::install_svn_integration;
 use table_core::{diff_files, format_text_diff};
 
@@ -44,6 +44,9 @@ enum Command {
         /// Optional JSON file overriding localized Excel report labels.
         #[arg(long)]
         labels: Option<PathBuf>,
+        /// Excel report layout: arranged per-sheet (default) or compact single-page.
+        #[arg(long, value_enum, default_value = "arranged")]
+        layout: ExcelLayoutArg,
     },
     Merge {
         base: PathBuf,
@@ -79,6 +82,21 @@ enum OutputFormat {
 enum ReportFormat {
     Text,
     Json,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum ExcelLayoutArg {
+    Compact,
+    Arranged,
+}
+
+impl From<ExcelLayoutArg> for DiffExcelLayout {
+    fn from(value: ExcelLayoutArg) -> Self {
+        match value {
+            ExcelLayoutArg::Compact => DiffExcelLayout::Compact,
+            ExcelLayoutArg::Arranged => DiffExcelLayout::Arranged,
+        }
+    }
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -190,6 +208,7 @@ fn run(cli: Cli) -> Result<i32> {
             format,
             output,
             labels,
+            layout,
         } => {
             let result = diff_files(&old, &new)?;
             match format {
@@ -202,7 +221,7 @@ fn run(cli: Cli) -> Result<i32> {
                         .map(DiffReportLabels::from_json_path)
                         .transpose()?
                         .unwrap_or_default();
-                    write_diff_excel_with_labels(&result, &output, &labels)?;
+                    write_diff_excel_with_layout(&result, &output, &labels, layout.into())?;
                     println!("{}", output.display());
                 }
             }

@@ -1,12 +1,12 @@
 use calamine::{Data, Reader, open_workbook_auto};
 use rust_xlsxwriter::Workbook as XlsxWorkbook;
-use table_core::DiffReportLabels;
 use table_core::diff_workbooks;
 use table_core::formula::analyze_formula;
 use table_core::merge::{MergeStrategy, merge_workbooks};
 use table_core::model::{Cell, Header, Row, Sheet, Workbook};
-use table_core::output::{write_diff_excel_with_labels, write_merge_excel};
+use table_core::output::{write_diff_excel_with_layout, write_merge_excel};
 use table_core::snapshot::workbook_to_text;
+use table_core::{DiffExcelLayout, DiffReportLabels, Issue};
 
 fn header(cn: &str, en: &str) -> Header {
     Header::new(cn, en, "string")
@@ -135,7 +135,13 @@ fn diff_excel_keeps_summary_and_original_cell_layout_on_one_page() {
                 .unwrap()
                 .as_nanos()
         ));
-    write_diff_excel_with_labels(&result, &path, &DiffReportLabels::default()).unwrap();
+    write_diff_excel_with_layout(
+        &result,
+        &path,
+        &DiffReportLabels::default(),
+        DiffExcelLayout::Compact,
+    )
+    .unwrap();
 
     let mut workbook = open_workbook_auto(&path).unwrap();
     assert_eq!(workbook.sheet_names(), vec!["比对报告"]);
@@ -163,6 +169,89 @@ fn diff_excel_keeps_summary_and_original_cell_layout_on_one_page() {
     assert_eq!(cell_text(&range, deleted_row, 1), "C");
     assert_eq!(cell_text(&range, deleted_row, 2), "Gamma");
     assert_eq!(cell_text(&range, deleted_row, 3), "3");
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn arranged_diff_excel_uses_sheet_tabs_and_groups_blank_row_issues() {
+    let old = table(
+        "old.xlsx",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[("A", &[("Row", "A"), ("Name", "Alpha")])],
+    );
+    let new = table(
+        "new.xlsx",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[
+            ("A", &[("Row", "A"), ("Name", "Alpha")]),
+            ("B", &[("Row", "B"), ("Name", "Beta")]),
+        ],
+    );
+    let mut result = diff_workbooks(&old, &new);
+    for row in [410, 411, 412, 500, 501] {
+        result.issues.push(Issue::new(
+            "blank_row_removed",
+            "warning",
+            "检测到空数据行，加载时已从模型中移除。",
+            Some("#Data"),
+            Some(row),
+            None,
+            None,
+        ));
+    }
+    let important = Issue::new(
+        "cross_row_ref",
+        "error",
+        "公式引用了其他数据行。",
+        Some("#Data"),
+        Some(189),
+        Some("MechaId (机甲ID)"),
+        Some("B187".to_string()),
+    );
+    result.issues.push(important.clone());
+    result.issues.push(important);
+
+    let path = std::env::current_dir()
+        .unwrap()
+        .join("target")
+        .join(format!(
+            "table-core-arranged-{}-{}.xlsx",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+    write_diff_excel_with_layout(
+        &result,
+        &path,
+        &DiffReportLabels::default(),
+        DiffExcelLayout::Arranged,
+    )
+    .unwrap();
+    let mut workbook = open_workbook_auto(&path).unwrap();
+    let names = workbook.sheet_names();
+    assert_eq!(names, vec!["#Data", "比对报告"]);
+    let data = workbook.worksheet_range("#Data").unwrap();
+    assert_eq!(cell_text(&data, 0, 0), "中文字段名");
+    assert_eq!(cell_text(&data, 1, 0), "英文字段名");
+    assert_eq!(cell_text(&data, 2, 0), "字段类型");
+    assert_eq!(cell_text(&data, 4, 0), "[新增]");
+    assert_eq!(cell_text(&data, 4, 1), "B");
+
+    let report = workbook.worksheet_range("比对报告").unwrap();
+    let blank_rows = (0..report.height() as u32)
+        .filter(|row| cell_text(&report, *row, 1) == "blank_row_removed")
+        .collect::<Vec<_>>();
+    assert_eq!(blank_rows.len(), 1);
+    assert_eq!(cell_text(&report, blank_rows[0], 3), "410-412, 500-501");
+    assert!(cell_text(&report, blank_rows[0], 5).contains("5 个空数据行"));
+    let important_rows = (0..report.height() as u32)
+        .filter(|row| cell_text(&report, *row, 1) == "cross_row_ref")
+        .collect::<Vec<_>>();
+    assert_eq!(important_rows.len(), 1);
+    assert_eq!(cell_text(&report, important_rows[0], 0), "错误");
 
     let _ = std::fs::remove_file(path);
 }

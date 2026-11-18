@@ -49,6 +49,7 @@ pub struct DiffReportLabels {
     pub column: String,
     pub message: String,
     pub reference: String,
+    pub blank_rows_removed_group: String,
     pub error: String,
     pub warning: String,
     pub info: String,
@@ -95,6 +96,8 @@ impl Default for DiffReportLabels {
             column: "列".to_string(),
             message: "说明".to_string(),
             reference: "引用".to_string(),
+            blank_rows_removed_group: "检测到 {count} 个空数据行，加载时已从模型中移除。"
+                .to_string(),
             error: "错误".to_string(),
             warning: "警告".to_string(),
             info: "提示".to_string(),

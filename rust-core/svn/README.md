@@ -50,7 +50,7 @@ Merge: "C:\Tools\table-core\svn\svn-merge.cmd" %merged %theirs %mine %base
 
 ## 行为
 
-- xlsx 族差异会生成单页比对报告并打开审阅。
+- xlsx 族差异会生成排列模式报告：每个原表页签独立，最后是比对报告。
 - 合并会生成 `_MergeReview`、`_MergeConflicts`、`_MergeChanges` 和 `_MergeIssues`。
 - 存在未解决冲突时仍写出审查工作簿，但返回退出码 `2`，Subversion 不会将其视为成功解决。
 - 支持 `.xlsx.r1234`、`.xlsx.mine` 等 SVN 临时文件名。

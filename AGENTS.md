@@ -12,6 +12,8 @@
 - 禁止把 `rust-core/target`、`rust-core/dist`、测试输出、日志或压缩包提交到任一仓库。
 - 根目录 `README.md`、发布二进制和 SVN 包装器由 SVN 管理。Git 中不得重新跟踪根目录
   `README.md`，也不得使用 `git add -A` 代替选择性暂存。
+- Excel 差异报告默认使用 `--layout arranged`：每个原表页签独立，最后生成“比对报告”；
+  空行问题按工作表合并，重要问题逐条说明。原单页样式保留为 `--layout compact` 配置项。
 
 当前 SVN 忽略项至少应包含：
 

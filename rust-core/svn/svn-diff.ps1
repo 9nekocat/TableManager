@@ -141,7 +141,7 @@ if (!(Test-ExcelWorkbook $oldPath) -or !(Test-ExcelWorkbook $newPath)) {
 
 $tableCore = Get-TableCorePath
 $output = Get-OutputPath @($oldPath, $newPath)
-& $tableCore diff $oldPath $newPath --format excel --output $output
+& $tableCore diff $oldPath $newPath --format excel --layout arranged --output $output
 $exitCode = $LASTEXITCODE
 
 if (!(Test-Path -LiteralPath $output -PathType Leaf) -or (Get-Item -LiteralPath $output).Length -eq 0) {

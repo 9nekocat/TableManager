@@ -37,6 +37,7 @@
   "column": "列",
   "message": "说明",
   "reference": "引用",
+  "blank_rows_removed_group": "检测到 {count} 个空数据行，加载时已从模型中移除。",
   "error": "错误",
   "warning": "警告",
   "info": "提示"
