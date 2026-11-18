@@ -8,12 +8,24 @@
 
 ## Subversion 命令行
 
-首选自动注册（写入当前用户的 Subversion 配置，并保留 `config.table-core.bak`）：
+首选自动注册。根目录的 `configure-svn.bat` 会同时配置：
+
+- 当前用户的 Subversion `diff-cmd` / `merge-tool-cmd`；
+- TortoiseSVN 的 `.xlsx`、`.xlsm`、`.xlsb`、`.xls` DiffTools 和 MergeTools。
+
+Subversion 配置会保留 `config.table-core.bak`；TortoiseSVN 注册表会备份到
+`%LOCALAPPDATA%\CatsInTheShell\TableManager\backup`。
 
 ```powershell
+.\configure-svn.bat
+.\configure-svn-管理员模式运行.bat
+
 C:\Tools\table-core\table-core.exe install-svn --dry-run
 C:\Tools\table-core\table-core.exe install-svn
 ```
+
+`table-core.exe install-svn` 只修改 Subversion 命令行配置；需要同时配置 TortoiseSVN 时，
+使用根目录的一键 BAT。
 
 编辑 `%APPDATA%\Subversion\config`：
 

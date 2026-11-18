@@ -144,15 +144,18 @@ Test-Path rust-core/dist
 
 ## 7. SVN 一键配置
 
-一键配置脚本的源码位于 `rust-core/configure-svn.bat`，发布时复制为根目录
-`configure-svn.bat`。它调用：
+一键配置脚本的源码位于 `rust-core/configure-svn.bat`，管理员入口源码位于
+`rust-core/configure-svn-管理员模式运行.bat`。发布时两个 BAT 都复制到根目录；
+管理员入口必须委托普通入口，避免出现两套配置逻辑。普通入口必须同时执行：
 
 ```text
 table-core.exe install-svn
+svn/configure-tortoisesvn.ps1
 ```
 
-该命令把当前用户 Subversion 的 `diff-cmd` 和 `merge-tool-cmd` 指向当前导出版，并在
-修改前保留 `config.table-core.bak`。无头调用使用：
+这两步分别把当前用户 Subversion 和 TortoiseSVN 的 xlsx 族 diff/merge 指向当前导出版。
+Subversion 修改前保留 `config.table-core.bak`；TortoiseSVN 注册表备份到
+`%LOCALAPPDATA%\CatsInTheShell\TableManager\backup`。无头调用使用：
 
 ```text
 svn/svn-diff-headless.cmd
