@@ -2,7 +2,7 @@
 
 ## 结论
 
-Rust 只读核心已经落地到 `rust-core/`，采用“xlsx → 纯文本快照 → 校验/差异”流程，公式只取 Excel 缓存值。
+Rust 核心已经落地到 `rust-core/`：差异采用“xlsx → 纯文本快照 → 校验/差异”，公式取 Excel 缓存值；三路合并保留简单公式并生成审查页。
 
 在 `A:/DataTable/Raw` 的真实表上：
 
@@ -47,6 +47,15 @@ Rust 核心内部分段（Card，100 个单元格修改）：
 | 差异 Excel 写出 | 0.002s |
 
 Effect 的文本差异约 0.040s，差异 Excel 写出约 0.002s。
+
+Rust 合并实测（base 加载后、两侧各修改 50 个单元格）：
+
+| 表 | merge 计算 | 合并 Excel 写出 | Python 合并计算+写出 | 提升 |
+| --- | ---: | ---: | ---: | ---: |
+| Card | 0.210s | 0.161s | 2.008s | 5.4x |
+| Effect | 1.152s | 0.223s | 2.538s | 1.8x |
+
+完整 Rust CLI 对三份相同输入执行合并并写盘：Card 约 1.03s，Effect 约 1.88s。
 
 ## 代表性大表
 
@@ -107,12 +116,12 @@ Effect 的文本差异约 0.040s，差异 Excel 写出约 0.002s。
 - Rust 若使用 `calamine`/`quick-xml` 直接构建轻量文本模型，避免 openpyxl 的完整对象图和外部链接对象树，加载阶段获得 5 倍左右提升是合理中心值。
 - 若 Rust 只是通过 FFI 调用 openpyxl，或者仍构造同样复杂的对象模型，预计只有 1.2–1.8 倍，不值得。
 
-## 已落地的最小 Rust 边界
+## 已落地的 Rust 边界
 
-已实现一个只读 Rust 核心和极简 CLI：
+已实现一个无界面 Rust 核心和极简 CLI：
 
 ```text
-xlsx → 文本快照 → 校验结果 + 差异结果（JSON/类 Git 文本）
+xlsx → 文本快照/三路合并 → JSON 或类 Git 文本 + Excel 输出
 ```
 
 保留在 Python 的职责：

@@ -75,7 +75,7 @@ A 盘真实表基准与 Rust 预估见 `docs/real-table-benchmark-rust-estimate.
 | `src/core/formula.py` | 简单公式风险分级、行内公式重绑定 |
 | `src/core/text.py` | 把工作簿冻结为纯文本快照，公式只取缓存值 |
 | `src/core/diff.py` | 文本快照差异、行列增删改、文本/JSON/Excel 输出 |
-| `src/core/merge.py` | 三路合并、冲突策略、审查报告 |
+| `src/core/merge.py` | Python 参考实现：三路合并、冲突策略、审查报告 |
 | `src/core/operations.py` | 面向人类和 AI 的声明式 JSON 操作 |
 | `src/core_cli.py` | `validate`、`inspect`、`diff`、`merge`、`edit` |
 
@@ -131,7 +131,7 @@ python src/core_cli.py merge base.xlsx mine.xlsx theirs.xlsx --strategy ours --o
 
 - 本轮不替换旧 GUI 和旧 CLI 入口，先验证新核心 API。
 - 新核心的生成文件不承诺保留 Excel COM 缓存、宏、外链 XML 或动态数组元数据。
-- 本轮不引入 Rust。当前环境没有 Rust 工具链；旧链路最明显的性能瓶颈是 Excel COM，新核心已移除该依赖。只有在真实业务表基准显示 Python 数据层仍是热点时，才值得把 `diff.py` 的纯计算部分迁移到 Rust，而不是重写整个程序。
+- Rust 核心已实现校验、文本快照、两文件差异和三路合并，见 `rust-core/`。仍是生成式输出，不替代需要精确保留外链/动态数组元数据的原地事务写回。
 - 列删除若被公式引用，默认拒绝；确认破坏风险后才允许执行。
 
 ## 下一阶段
@@ -139,4 +139,4 @@ python src/core_cli.py merge base.xlsx mine.xlsx theirs.xlsx --strategy ours --o
 1. 用真实大表建立加载、diff、merge 基准和内存峰值基线。
 2. 将旧 GUI/CLI 的差异与合并按钮适配到新核心，保留兼容入口。
 3. 增加真实 SVN 三文件样本回归，覆盖列重命名、重复表头、外链公式和动态数组。
-4. 根据基准决定是否需要 Rust 差异内核；优先替换热点，而不是整体重写。
+4. 将 Rust 差异/合并核心接入现有 GUI、API 和 SVN 工作流。

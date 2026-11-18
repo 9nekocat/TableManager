@@ -4,8 +4,9 @@ use clap::{Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 use serde_json::{Value, json};
 use table_core::error::Result;
+use table_core::merge::{MergeStrategy, format_merge_text, merge_files};
 use table_core::model::read_workbook;
-use table_core::output::write_diff_excel;
+use table_core::output::{write_diff_excel, write_merge_excel};
 use table_core::{diff_files, format_text_diff};
 
 #[derive(Parser)]
@@ -39,6 +40,19 @@ enum Command {
         #[arg(long)]
         output: Option<PathBuf>,
     },
+    Merge {
+        base: PathBuf,
+        ours: PathBuf,
+        theirs: PathBuf,
+        #[arg(long, value_enum, default_value = "fail")]
+        strategy: StrategyArg,
+        #[arg(long)]
+        output: Option<PathBuf>,
+        #[arg(long, value_enum, default_value = "text")]
+        report: ReportFormat,
+        #[arg(long)]
+        allow_conflicts: bool,
+    },
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -46,6 +60,29 @@ enum OutputFormat {
     Text,
     Json,
     Excel,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum ReportFormat {
+    Text,
+    Json,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum StrategyArg {
+    Fail,
+    Ours,
+    Theirs,
+}
+
+impl From<StrategyArg> for MergeStrategy {
+    fn from(value: StrategyArg) -> Self {
+        match value {
+            StrategyArg::Fail => MergeStrategy::Fail,
+            StrategyArg::Ours => MergeStrategy::Ours,
+            StrategyArg::Theirs => MergeStrategy::Theirs,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -156,6 +193,43 @@ fn run(cli: Cli) -> Result<i32> {
                 0
             })
         }
+        Command::Merge {
+            base,
+            ours,
+            theirs,
+            strategy,
+            output,
+            report,
+            allow_conflicts,
+        } => {
+            let result = merge_files(&base, &ours, &theirs, strategy.into())?;
+            match report {
+                ReportFormat::Text => println!("{}", format_merge_text(&result)),
+                ReportFormat::Json => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&json!({
+                            "ok": result.ok(),
+                            "strategy": result.strategy,
+                            "summary": result.summary(),
+                            "changes": &result.changes,
+                            "issues": &result.issues,
+                        }))?
+                    );
+                }
+            }
+            if result.has_unresolved_conflicts() && !allow_conflicts {
+                eprintln!(
+                    "merge not written: {} unresolved conflicts",
+                    result.conflict_count()
+                );
+                return Ok(2);
+            }
+            let output = output.unwrap_or_else(|| default_merge_path(&ours));
+            write_merge_excel(&result, &output, true)?;
+            println!("{}", output.display());
+            Ok(if result.ok() { 0 } else { 2 })
+        }
     }
 }
 
@@ -165,6 +239,14 @@ fn default_diff_path(path: &Path) -> PathBuf {
         .and_then(|value| value.to_str())
         .unwrap_or("workbook");
     path.with_file_name(format!("{stem}_diff.xlsx"))
+}
+
+fn default_merge_path(path: &Path) -> PathBuf {
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("workbook");
+    path.with_file_name(format!("{stem}_merged.xlsx"))
 }
 
 fn print_inspect(value: &Value) {

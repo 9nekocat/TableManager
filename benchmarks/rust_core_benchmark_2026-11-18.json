@@ -39,6 +39,24 @@
       "diff_seconds": 0.040,
       "text_seconds": 0.00005,
       "excel_seconds": 0.002
+    },
+    "merge": {
+      "card": {
+        "rust_merge_seconds": 0.210,
+        "rust_excel_seconds": 0.161,
+        "rust_compute_output_seconds": 0.371,
+        "python_compute_output_seconds": 2.008,
+        "speedup": 5.4,
+        "full_cli_seconds": 1.03
+      },
+      "effect": {
+        "rust_merge_seconds": 1.152,
+        "rust_excel_seconds": 0.223,
+        "rust_compute_output_seconds": 1.375,
+        "python_compute_output_seconds": 2.538,
+        "speedup": 1.8,
+        "full_cli_seconds": 1.88
+      }
     }
   }
 }

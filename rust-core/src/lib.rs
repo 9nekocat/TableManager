@@ -1,6 +1,7 @@
 pub mod diff;
 pub mod error;
 pub mod formula;
+pub mod merge;
 pub mod model;
 pub mod output;
 pub mod snapshot;
@@ -11,5 +12,9 @@ pub use diff::{
 };
 pub use error::{CoreError, Result};
 pub use formula::{FormulaFinding, analyze_formula};
+pub use merge::{
+    MergeChange, MergeResult, MergeStrategy, MergeSummary, format_merge_text, merge_files,
+    merge_workbooks,
+};
 pub use model::{Cell, Header, Issue, Row, Sheet, Workbook};
 pub use snapshot::{TextRow, TextSheet, TextWorkbook, workbook_to_text};

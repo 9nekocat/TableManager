@@ -6,7 +6,7 @@ UE DataTable 配置表管理工具。提供表格浏览、校验、SVN 更新、
 
 `src/core/` 提供不依赖 GUI、SVN 和 Excel COM 的纯数据核心，支持校验、CRUD、两文件差异和三路合并。差异会先把工作簿转成纯文本快照，公式直接使用 Excel 缓存值。设计与审查结论见 [docs/core-refactor-review.md](docs/core-refactor-review.md)，真实表性能见 [docs/real-table-benchmark-rust-estimate.md](docs/real-table-benchmark-rust-estimate.md)。
 
-高性能只读路径已经迁移到 Rust：`rust-core/` 提供无界面的库和 `table-core` CLI，覆盖校验、文本快照、差异及 JSON/文本/Excel 输出。
+高性能核心已经迁移到 Rust：`rust-core/` 提供无界面的库和 `table-core` CLI，覆盖校验、文本快照、差异、三路合并及 JSON/文本/Excel 输出。合并输出使用 `ours` 作为布局基准，保留简单公式并生成审查页。
 
 开发入口：
 
@@ -17,6 +17,7 @@ python src/core_cli.py merge <base.xlsx> <ours.xlsx> <theirs.xlsx> --output <mer
 
 cargo build --release --manifest-path rust-core/Cargo.toml
 rust-core\target\release\table-core.exe diff <old.xlsx> <new.xlsx> --format text
+rust-core\target\release\table-core.exe merge <base.xlsx> <ours.xlsx> <theirs.xlsx> --strategy fail --output <merged.xlsx>
 ```
 
 ## 环境准备
