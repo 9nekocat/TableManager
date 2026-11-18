@@ -6,7 +6,7 @@ rust-core/dist/
 /config/
 /svn/
 /table-core.exe
-/configure-svn.bat
+/configure-svn*.bat
 /README.md
 /*.zip
 /*.sha256
