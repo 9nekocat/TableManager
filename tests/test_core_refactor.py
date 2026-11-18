@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from core.diff import diff_files, format_text_diff, write_diff_excel
+from core.diff import diff_documents, diff_files, format_text_diff, write_diff_excel
 from core.formula import analyze_formula
 from core.merge import (
     MergeConflictError,
@@ -17,7 +17,7 @@ from core.merge import (
     merge_files,
     write_merge_excel,
 )
-from core.model import DATA_START_ROW, Header, Sheet, WorkbookDocument
+from core.model import Cell, DATA_START_ROW, Header, Row, Sheet, WorkbookDocument
 from core.operations import apply_operations
 from core_cli import main as cli_main
 
@@ -102,6 +102,10 @@ def test_duplicate_headers_are_reported_without_collapsing_columns(tmp_path):
     assert len(sheet.headers) == 3
     report = document.validate()
     assert any(issue.code == "duplicate_english_header" for issue in report.issues)
+    result = diff_files(path, path)
+    output = tmp_path / "duplicate_headers_diff.xlsx"
+    write_diff_excel(result, output)
+    assert output.exists()
 
 
 def test_formula_risk_contract():
@@ -111,6 +115,11 @@ def test_formula_risk_contract():
     assert any(issue.code == "cross_row_ref" and issue.is_error for issue in cross_row)
     external = analyze_formula("='[Book.xlsx]Sheet'!$A$1", source_row=4, source_col=2)
     assert any(issue.code == "external_workbook_ref" and issue.is_error for issue in external)
+    numbered_external = analyze_formula("='[1]#Main'!$C$3882", source_row=4, source_col=2)
+    assert any(
+        issue.code == "external_workbook_ref" and issue.is_error
+        for issue in numbered_external
+    )
     array = analyze_formula(
         '=TEXTJOIN(",",TRUE,C4:D4)',
         source_row=4,
@@ -118,6 +127,42 @@ def test_formula_risk_contract():
         is_array=True,
     )
     assert any(issue.code == "array_formula" for issue in array)
+
+
+def test_diff_compares_cached_formula_values_as_text():
+    headers = [
+        Header("行名", "Row", "FString"),
+        Header("名称", "Name", "FString"),
+        Header("结果", "Result", "FString"),
+    ]
+    old = WorkbookDocument(
+        {
+            "#Data": Sheet(
+                "#Data",
+                headers,
+                [
+                    Row(
+                        "A",
+                        [
+                            Cell(value="A"),
+                            Cell(value="Alpha"),
+                            Cell(value="10", formula="=B4", formula_row=4, formula_col=3),
+                        ],
+                    )
+                ],
+            )
+        }
+    )
+    new = old.clone()
+    new_cell = new.sheet("#Data").rows[0].cells[2]
+    new_cell.formula = "=C4+0"
+
+    assert not diff_documents(old, new, validate_inputs=False).has_changes
+
+    new_cell.value = None
+    result = diff_documents(old, new, validate_inputs=False)
+    assert result.has_changes
+    assert any(issue.code == "formula_value_unavailable" for issue in result.issues)
 
 
 def test_diff_detects_cell_row_and_column_crud(tmp_path):
@@ -162,6 +207,30 @@ def test_diff_detects_cell_row_and_column_crud(tmp_path):
         assert wb["Changes"].max_row > 1
     finally:
         wb.close()
+
+
+def test_text_diff_formats_issue_locations_with_integer_rows(tmp_path):
+    old_path = _write_table(
+        tmp_path / "issue_old.xlsx",
+        COLUMNS,
+        [
+            {"Row": "A", "Name": "Alpha", "Power": 1},
+            {"Row": "B", "Name": "Beta", "Power": 2},
+        ],
+        blank_middle=True,
+    )
+    new_path = _write_table(
+        tmp_path / "issue_new.xlsx",
+        COLUMNS,
+        [
+            {"Row": "A", "Name": "Alpha", "Power": 1},
+            {"Row": "B", "Name": "Beta", "Power": 3},
+        ],
+        blank_middle=True,
+    )
+    result = diff_files(old_path, new_path)
+    assert any(issue.row is not None for issue in result.issues)
+    assert "Warnings:" in format_text_diff(result)
 
 
 def test_merge_combines_non_conflicting_cell_row_and_column_changes(tmp_path):

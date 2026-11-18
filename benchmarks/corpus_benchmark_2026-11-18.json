@@ -1,0 +1,706 @@
+{
+  "raw_root": "A:\\DataTable\\Raw",
+  "file_count": 38,
+  "runs": [
+    {
+      "run": 1,
+      "total_s": 5.675637399999914,
+      "files": [
+        {
+          "file": "AscensionEventTypePool.xlsx",
+          "load_s": 0.008353899999974601,
+          "validate_s": 5.310000005920301e-05,
+          "diff_s": 0.00031620000004295434,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "BattleDropGroupType.xlsx",
+          "load_s": 0.011132800000041243,
+          "validate_s": 0.0012250999998286716,
+          "diff_s": 0.0017564000002039393,
+          "sheets": 1,
+          "issues": 1,
+          "error": null
+        },
+        {
+          "file": "CardShape.xlsx",
+          "load_s": 0.006310200000143595,
+          "validate_s": 3.8599999925281736e-05,
+          "diff_s": 0.00020799999992959783,
+          "sheets": 1,
+          "issues": 1,
+          "error": null
+        },
+        {
+          "file": "CardTable.xlsx",
+          "load_s": 0.059193199999981516,
+          "validate_s": 6.299999995462713e-06,
+          "diff_s": 1.5000000075815478e-05,
+          "sheets": 0,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "DialogActionData.xlsx",
+          "load_s": 0.0108837999998741,
+          "validate_s": 9.060000002136803e-05,
+          "diff_s": 0.00033750000011423253,
+          "sheets": 2,
+          "issues": 2,
+          "error": null
+        },
+        {
+          "file": "DialogConditionData.xlsx",
+          "load_s": 0.006551299999955518,
+          "validate_s": 4.080000007888884e-05,
+          "diff_s": 0.00026390000016363047,
+          "sheets": 1,
+          "issues": 1,
+          "error": null
+        },
+        {
+          "file": "DialogEffectData.xlsx",
+          "load_s": 0.015949999999975262,
+          "validate_s": 2.3600000076839933e-05,
+          "diff_s": 0.0001255999998193147,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "Effect.xlsx",
+          "load_s": 0.8212762999999086,
+          "validate_s": 0.18885390000014013,
+          "diff_s": 0.2668502000001354,
+          "sheets": 3,
+          "issues": 14,
+          "error": null
+        },
+        {
+          "file": "Effectnumber.xlsx",
+          "load_s": 0.055261200000131794,
+          "validate_s": 0.005328299999973751,
+          "diff_s": 0.012809199999992416,
+          "sheets": 1,
+          "issues": 1,
+          "error": null
+        },
+        {
+          "file": "Event.xlsx",
+          "load_s": 0.018460000000004584,
+          "validate_s": 0.0016562999999223393,
+          "diff_s": 0.0026324999998905696,
+          "sheets": 1,
+          "issues": 1,
+          "error": null
+        },
+        {
+          "file": "EventStyle.xlsx",
+          "load_s": 0.012812599999961094,
+          "validate_s": 0.004887000000053376,
+          "diff_s": 0.0014482999999927415,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "EventTypePool.xlsx",
+          "load_s": 0.0058575000000473665,
+          "validate_s": 6.619999999202264e-05,
+          "diff_s": 0.0005373000001327455,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "FlagConfigRow.xlsx",
+          "load_s": 0.007536800000025323,
+          "validate_s": 7.019999998192361e-05,
+          "diff_s": 0.0002789999998640269,
+          "sheets": 2,
+          "issues": 4,
+          "error": null
+        },
+        {
+          "file": "GameplayTagTableRow.xlsx",
+          "load_s": 0.01000290000001769,
+          "validate_s": 7.299999992937956e-05,
+          "diff_s": 0.0005539000001135719,
+          "sheets": 4,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "InfiniteEventTypePool.xlsx",
+          "load_s": 0.0092291999999361,
+          "validate_s": 0.002379699999892182,
+          "diff_s": 0.001575100000081875,
+          "sheets": 1,
+          "issues": 2,
+          "error": null
+        },
+        {
+          "file": "Localization\\AttributeTable.xlsx",
+          "load_s": 0.10265559999993457,
+          "validate_s": 0.1927522000000863,
+          "diff_s": 0.02966019999985292,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "Localization\\Buff.xlsx",
+          "load_s": 0.3319538000000648,
+          "validate_s": 0.006811700000071141,
+          "diff_s": 0.009116599999970276,
+          "sheets": 1,
+          "issues": 5,
+          "error": null
+        },
+        {
+          "file": "Localization\\Card.xlsx",
+          "load_s": 1.6004224000000704,
+          "validate_s": 0.5790271000000757,
+          "diff_s": 0.2371295000000373,
+          "sheets": 4,
+          "issues": 91,
+          "error": null
+        },
+        {
+          "file": "Localization\\CatSkinDisplayTable.xlsx",
+          "load_s": 0.013083300000062081,
+          "validate_s": 0.0002801000000545173,
+          "diff_s": 0.0005594000001565291,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "Localization\\DialogData2.xlsx",
+          "load_s": 0.0219988999999714,
+          "validate_s": 4.5300000010684016e-05,
+          "diff_s": 0.00018569999997453124,
+          "sheets": 1,
+          "issues": 970,
+          "error": null
+        },
+        {
+          "file": "Localization\\Drone.xlsx",
+          "load_s": 0.07244820000005348,
+          "validate_s": 0.0019813000001249748,
+          "diff_s": 0.0033765000000585133,
+          "sheets": 1,
+          "issues": 2,
+          "error": null
+        },
+        {
+          "file": "Localization\\MechaTable1.xlsx",
+          "load_s": 0.0396038999999746,
+          "validate_s": 0.0018980000002102315,
+          "diff_s": 0.006047999999964304,
+          "sheets": 1,
+          "issues": 2,
+          "error": null
+        },
+        {
+          "file": "Localization\\PvpCatTableTable.xlsx",
+          "load_s": 0.03640500000005886,
+          "validate_s": 0.0001933000000917673,
+          "diff_s": 0.0005983999999443768,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "Localization\\RavenPilotSkillData.xlsx",
+          "load_s": 0.009436699999923803,
+          "validate_s": 0.00021090000018375576,
+          "diff_s": 0.0005593999999291555,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "Localization\\ShopFilterCondition.xlsx",
+          "load_s": 0.02180450000014389,
+          "validate_s": 0.0018039999999928114,
+          "diff_s": 0.002945700000054785,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "Localization\\TacticalEncounterData.xlsx",
+          "load_s": 0.1117380000000594,
+          "validate_s": 0.01706240000021353,
+          "diff_s": 0.018062300000110554,
+          "sheets": 1,
+          "issues": 3,
+          "error": null
+        },
+        {
+          "file": "Localization\\Tag.xlsx",
+          "load_s": 0.007607799999959752,
+          "validate_s": 0.00026109999998880085,
+          "diff_s": 0.0005840000001171575,
+          "sheets": 1,
+          "issues": 2,
+          "error": null
+        },
+        {
+          "file": "Localization\\~$ShopFilterCondition.xlsx",
+          "load_s": 0.00019730000008166826,
+          "validate_s": 0.0,
+          "diff_s": 0.0,
+          "sheets": 0,
+          "issues": 0,
+          "error": "BadZipFile: File is not a zip file"
+        },
+        {
+          "file": "Localization\\~$TacticalEncounterData.xlsx",
+          "load_s": 0.0001720000000204891,
+          "validate_s": 0.0,
+          "diff_s": 0.0,
+          "sheets": 0,
+          "issues": 0,
+          "error": "BadZipFile: File is not a zip file"
+        },
+        {
+          "file": "ProjectileTable.xlsx",
+          "load_s": 0.3045716999999968,
+          "validate_s": 0.0010507999998026207,
+          "diff_s": 0.0029105999999501364,
+          "sheets": 1,
+          "issues": 4,
+          "error": null
+        },
+        {
+          "file": "StoryInteractableRow.xlsx",
+          "load_s": 0.011118799999849216,
+          "validate_s": 0.00015859999984968454,
+          "diff_s": 0.0008333000000675383,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "StoryItemSettlementRow.xlsx",
+          "load_s": 0.0051614000001336535,
+          "validate_s": 1.6699999832781032e-05,
+          "diff_s": 7.809999988239724e-05,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "StoryMapPointData.xlsx",
+          "load_s": 0.01020210000001498,
+          "validate_s": 0.0006942999998500454,
+          "diff_s": 0.0005905999998958578,
+          "sheets": 1,
+          "issues": 7,
+          "error": null
+        },
+        {
+          "file": "StoryMapRegionData.xlsx",
+          "load_s": 0.01548569999999927,
+          "validate_s": 0.00010999999994965037,
+          "diff_s": 0.0001978999998755171,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "StoryMapRoomData.xlsx",
+          "load_s": 0.015608299999939845,
+          "validate_s": 0.001638100000036502,
+          "diff_s": 0.0027583999999478692,
+          "sheets": 1,
+          "issues": 1,
+          "error": null
+        },
+        {
+          "file": "StorySettlementActionRow.xlsx",
+          "load_s": 0.005335699999932331,
+          "validate_s": 2.0200000108161476e-05,
+          "diff_s": 8.40999998672487e-05,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "Target.xlsx",
+          "load_s": 0.02987000000007356,
+          "validate_s": 0.02186759999995047,
+          "diff_s": 0.005430599999954211,
+          "sheets": 1,
+          "issues": 1,
+          "error": null
+        },
+        {
+          "file": "卡牌文本需求.xlsx",
+          "load_s": 0.20460339999999633,
+          "validate_s": 6.299999995462713e-06,
+          "diff_s": 1.3099999932819628e-05,
+          "sheets": 0,
+          "issues": 0,
+          "error": null
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "total_s": 5.734458199999835,
+      "files": [
+        {
+          "file": "AscensionEventTypePool.xlsx",
+          "load_s": 0.007538900000099602,
+          "validate_s": 3.969999988839845e-05,
+          "diff_s": 0.00027620000014394464,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "BattleDropGroupType.xlsx",
+          "load_s": 0.011325799999895025,
+          "validate_s": 0.0008692999999766471,
+          "diff_s": 0.0018291000001227076,
+          "sheets": 1,
+          "issues": 1,
+          "error": null
+        },
+        {
+          "file": "CardShape.xlsx",
+          "load_s": 0.00637019999999211,
+          "validate_s": 3.6299999919719994e-05,
+          "diff_s": 0.00020329999983914604,
+          "sheets": 1,
+          "issues": 1,
+          "error": null
+        },
+        {
+          "file": "CardTable.xlsx",
+          "load_s": 0.06244849999984581,
+          "validate_s": 6.900000016685226e-06,
+          "diff_s": 1.4299999975264654e-05,
+          "sheets": 0,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "DialogActionData.xlsx",
+          "load_s": 0.013637899999821457,
+          "validate_s": 8.469999988847121e-05,
+          "diff_s": 0.0003517999998621235,
+          "sheets": 2,
+          "issues": 2,
+          "error": null
+        },
+        {
+          "file": "DialogConditionData.xlsx",
+          "load_s": 0.006906699999944976,
+          "validate_s": 4.1599999804020626e-05,
+          "diff_s": 0.0002712000000428816,
+          "sheets": 1,
+          "issues": 1,
+          "error": null
+        },
+        {
+          "file": "DialogEffectData.xlsx",
+          "load_s": 0.015994899999896006,
+          "validate_s": 2.5900000082401675e-05,
+          "diff_s": 0.00013220000005276233,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "Effect.xlsx",
+          "load_s": 0.9382530000000315,
+          "validate_s": 0.2007083999999395,
+          "diff_s": 0.27145949999999175,
+          "sheets": 3,
+          "issues": 14,
+          "error": null
+        },
+        {
+          "file": "Effectnumber.xlsx",
+          "load_s": 0.058483499999965716,
+          "validate_s": 0.0055811999998240935,
+          "diff_s": 0.014587599999913436,
+          "sheets": 1,
+          "issues": 1,
+          "error": null
+        },
+        {
+          "file": "Event.xlsx",
+          "load_s": 0.021063300000150775,
+          "validate_s": 0.0018357999999807362,
+          "diff_s": 0.0027953000001161854,
+          "sheets": 1,
+          "issues": 1,
+          "error": null
+        },
+        {
+          "file": "EventStyle.xlsx",
+          "load_s": 0.013444499999877735,
+          "validate_s": 0.005101799999920331,
+          "diff_s": 0.0014754000001175882,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "EventTypePool.xlsx",
+          "load_s": 0.006334100000003673,
+          "validate_s": 0.00011810000000878063,
+          "diff_s": 0.0006270999999742344,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "FlagConfigRow.xlsx",
+          "load_s": 0.008618999999953303,
+          "validate_s": 7.540000001426961e-05,
+          "diff_s": 0.00030679999986205075,
+          "sheets": 2,
+          "issues": 4,
+          "error": null
+        },
+        {
+          "file": "GameplayTagTableRow.xlsx",
+          "load_s": 0.012664199999790071,
+          "validate_s": 8.299999990413198e-05,
+          "diff_s": 0.0005989999999655993,
+          "sheets": 4,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "InfiniteEventTypePool.xlsx",
+          "load_s": 0.01120479999985946,
+          "validate_s": 0.002368899999964924,
+          "diff_s": 0.001603400000021793,
+          "sheets": 1,
+          "issues": 2,
+          "error": null
+        },
+        {
+          "file": "Localization\\AttributeTable.xlsx",
+          "load_s": 0.1147721999998339,
+          "validate_s": 0.20035089999987576,
+          "diff_s": 0.030654500000082407,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "Localization\\Buff.xlsx",
+          "load_s": 0.33263370000008763,
+          "validate_s": 0.006828799999993862,
+          "diff_s": 0.009285900000122638,
+          "sheets": 1,
+          "issues": 5,
+          "error": null
+        },
+        {
+          "file": "Localization\\Card.xlsx",
+          "load_s": 1.5994912000001023,
+          "validate_s": 0.5406625000000531,
+          "diff_s": 0.22519580000016504,
+          "sheets": 4,
+          "issues": 91,
+          "error": null
+        },
+        {
+          "file": "Localization\\CatSkinDisplayTable.xlsx",
+          "load_s": 0.01224780000006831,
+          "validate_s": 0.0001752000000578846,
+          "diff_s": 0.00039889999993647507,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "Localization\\DialogData2.xlsx",
+          "load_s": 0.0217856000001575,
+          "validate_s": 4.8699999979362474e-05,
+          "diff_s": 0.00018309999995835824,
+          "sheets": 1,
+          "issues": 970,
+          "error": null
+        },
+        {
+          "file": "Localization\\Drone.xlsx",
+          "load_s": 0.07500690000006216,
+          "validate_s": 0.0018365999999332416,
+          "diff_s": 0.002627000000074986,
+          "sheets": 1,
+          "issues": 2,
+          "error": null
+        },
+        {
+          "file": "Localization\\MechaTable1.xlsx",
+          "load_s": 0.03785229999994044,
+          "validate_s": 0.0016620999999759078,
+          "diff_s": 0.005672799999956624,
+          "sheets": 1,
+          "issues": 2,
+          "error": null
+        },
+        {
+          "file": "Localization\\PvpCatTableTable.xlsx",
+          "load_s": 0.03242190000014489,
+          "validate_s": 0.0001817999998365849,
+          "diff_s": 0.0005631999999877735,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "Localization\\RavenPilotSkillData.xlsx",
+          "load_s": 0.008248699999967357,
+          "validate_s": 0.00019399999996494444,
+          "diff_s": 0.0005255000000943255,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "Localization\\ShopFilterCondition.xlsx",
+          "load_s": 0.02163669999981721,
+          "validate_s": 0.0016854000000421365,
+          "diff_s": 0.0029676999999992404,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "Localization\\TacticalEncounterData.xlsx",
+          "load_s": 0.09740579999993315,
+          "validate_s": 0.01573269999994409,
+          "diff_s": 0.017872900000156733,
+          "sheets": 1,
+          "issues": 3,
+          "error": null
+        },
+        {
+          "file": "Localization\\Tag.xlsx",
+          "load_s": 0.007493399999930261,
+          "validate_s": 0.0002592999999251333,
+          "diff_s": 0.000466599999981554,
+          "sheets": 1,
+          "issues": 2,
+          "error": null
+        },
+        {
+          "file": "Localization\\~$ShopFilterCondition.xlsx",
+          "load_s": 0.00019090000000687724,
+          "validate_s": 0.0,
+          "diff_s": 0.0,
+          "sheets": 0,
+          "issues": 0,
+          "error": "BadZipFile: File is not a zip file"
+        },
+        {
+          "file": "Localization\\~$TacticalEncounterData.xlsx",
+          "load_s": 0.00010610000003907771,
+          "validate_s": 0.0,
+          "diff_s": 0.0,
+          "sheets": 0,
+          "issues": 0,
+          "error": "BadZipFile: File is not a zip file"
+        },
+        {
+          "file": "ProjectileTable.xlsx",
+          "load_s": 0.2951583000001392,
+          "validate_s": 0.0011162999999214662,
+          "diff_s": 0.0030902000000878616,
+          "sheets": 1,
+          "issues": 4,
+          "error": null
+        },
+        {
+          "file": "StoryInteractableRow.xlsx",
+          "load_s": 0.01076029999990169,
+          "validate_s": 0.00014950000013413955,
+          "diff_s": 0.000783899999987625,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "StoryItemSettlementRow.xlsx",
+          "load_s": 0.004312999999910971,
+          "validate_s": 1.619999989088683e-05,
+          "diff_s": 8.000000002539309e-05,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "StoryMapPointData.xlsx",
+          "load_s": 0.00882980000005773,
+          "validate_s": 0.0006476000000930071,
+          "diff_s": 0.0005802999999104941,
+          "sheets": 1,
+          "issues": 7,
+          "error": null
+        },
+        {
+          "file": "StoryMapRegionData.xlsx",
+          "load_s": 0.015151099999911821,
+          "validate_s": 0.00011489999997138511,
+          "diff_s": 0.00021030000016253325,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "StoryMapRoomData.xlsx",
+          "load_s": 0.015273900000011054,
+          "validate_s": 0.001780400000143345,
+          "diff_s": 0.0021228000000519387,
+          "sheets": 1,
+          "issues": 1,
+          "error": null
+        },
+        {
+          "file": "StorySettlementActionRow.xlsx",
+          "load_s": 0.005649100000027829,
+          "validate_s": 1.9699999938893598e-05,
+          "diff_s": 8.569999999963329e-05,
+          "sheets": 1,
+          "issues": 0,
+          "error": null
+        },
+        {
+          "file": "Target.xlsx",
+          "load_s": 0.02725479999980962,
+          "validate_s": 0.018874800000048708,
+          "diff_s": 0.004714800000101604,
+          "sheets": 1,
+          "issues": 1,
+          "error": null
+        },
+        {
+          "file": "卡牌文本需求.xlsx",
+          "load_s": 0.1813073999999233,
+          "validate_s": 4.999999873689376e-06,
+          "diff_s": 1.1000000085914508e-05,
+          "sheets": 0,
+          "issues": 0,
+          "error": null
+        }
+      ]
+    }
+  ],
+  "median_total_s": 5.705047799999875,
+  "median_load_s": 4.0747881999996025,
+  "median_validate_s": 1.0210010499995406,
+  "median_diff_s": 0.6080278000005137
+}

@@ -1,4 +1,8 @@
-"""Efficient value-oriented table diff with optional formula awareness."""
+"""Table diff over stable text snapshots.
+
+Formula cells use Excel's cached values only. No formula AST comparison or
+recalculation happens in this module.
+"""
 
 from __future__ import annotations
 
@@ -6,11 +10,12 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
-from .model import Header, Issue, Row, Sheet, WorkbookDocument
+from .model import Header, Issue, WorkbookDocument
+from .text import TextRow, TextSheet, workbook_to_text
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,16 +23,12 @@ class CellChange:
     column: str
     old: str
     new: str
-    old_formula: str | None = None
-    new_formula: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "column": self.column,
             "old": self.old,
             "new": self.new,
-            "old_formula": self.old_formula,
-            "new_formula": self.new_formula,
         }
 
 
@@ -36,8 +37,8 @@ class RowChange:
     sheet: str
     row: str
     kind: str
-    old_row: Row | None = None
-    new_row: Row | None = None
+    old_row: TextRow | None = None
+    new_row: TextRow | None = None
     cell_changes: list[CellChange] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -75,6 +76,7 @@ class ColumnChange:
 class SheetDiff:
     sheet: str
     status: str
+    columns: tuple[Header, ...] = ()
     column_changes: list[ColumnChange] = field(default_factory=list)
     row_changes: list[RowChange] = field(default_factory=list)
 
@@ -86,7 +88,8 @@ class SheetDiff:
         return {
             "sheet": self.sheet,
             "status": self.status,
-            "columns": [change.to_dict() for change in self.column_changes],
+            "columns": [column.to_dict() for column in self.columns],
+            "column_changes": [change.to_dict() for change in self.column_changes],
             "rows": [change.to_dict() for change in self.row_changes],
         }
 
@@ -97,7 +100,6 @@ class DiffResult:
     new_path: str | None
     sheets: list[SheetDiff] = field(default_factory=list)
     issues: list[Issue] = field(default_factory=list)
-    include_formula: bool = False
 
     @property
     def has_changes(self) -> bool:
@@ -140,7 +142,7 @@ class DiffResult:
         return {
             "old": self.old_path,
             "new": self.new_path,
-            "include_formula": self.include_formula,
+            "comparison": "text_snapshot_with_cached_formula_values",
             "has_changes": self.has_changes,
             "summary": self.summary,
             "sheets": [sheet.to_dict() for sheet in self.sheets],
@@ -161,12 +163,10 @@ class _AlignedColumn:
 def diff_files(
     old_path: str | Path,
     new_path: str | Path,
-    *,
-    include_formula: bool = False,
 ) -> DiffResult:
     old_doc = WorkbookDocument.from_xlsx(old_path)
     new_doc = WorkbookDocument.from_xlsx(new_path)
-    result = diff_documents(old_doc, new_doc, include_formula=include_formula)
+    result = diff_documents(old_doc, new_doc)
     result.old_path = str(old_path)
     result.new_path = str(new_path)
     return result
@@ -176,38 +176,55 @@ def diff_documents(
     old_doc: WorkbookDocument,
     new_doc: WorkbookDocument,
     *,
-    include_formula: bool = False,
+    validate_inputs: bool = True,
 ) -> DiffResult:
     result = DiffResult(
         old_path=old_doc.source_path,
         new_path=new_doc.source_path,
-        include_formula=include_formula,
     )
-    result.issues.extend(old_doc.validate().issues)
-    result.issues.extend(new_doc.validate().issues)
+    if validate_inputs:
+        result.issues.extend(old_doc.validate().issues)
+        result.issues.extend(new_doc.validate().issues)
+    else:
+        result.issues.extend(old_doc.load_issues)
+        result.issues.extend(new_doc.load_issues)
+    old_snapshot = workbook_to_text(old_doc)
+    new_snapshot = workbook_to_text(new_doc)
+    result.issues.extend(old_snapshot.issues)
+    result.issues.extend(new_snapshot.issues)
     sheet_names = list(
-        OrderedDict.fromkeys([*old_doc.sheets.keys(), *new_doc.sheets.keys()]).keys()
+        OrderedDict.fromkeys(
+            [*old_snapshot.sheets.keys(), *new_snapshot.sheets.keys()]
+        ).keys()
     )
     for sheet_name in sheet_names:
-        old_sheet = old_doc.sheets.get(sheet_name)
-        new_sheet = new_doc.sheets.get(sheet_name)
+        old_sheet = old_snapshot.sheets.get(sheet_name)
+        new_sheet = new_snapshot.sheets.get(sheet_name)
         if old_sheet is None:
             result.sheets.append(
-                SheetDiff(sheet_name, "added", row_changes=_row_changes(None, new_sheet))
+                SheetDiff(
+                    sheet_name,
+                    "added",
+                    columns=new_sheet.headers,
+                    row_changes=_row_changes(None, new_sheet),
+                )
             )
             continue
         if new_sheet is None:
             result.sheets.append(
-                SheetDiff(sheet_name, "deleted", row_changes=_row_changes(old_sheet, None))
+                SheetDiff(
+                    sheet_name,
+                    "deleted",
+                    columns=old_sheet.headers,
+                    row_changes=_row_changes(old_sheet, None),
+                )
             )
             continue
-        result.sheets.append(
-            _diff_sheet(old_sheet, new_sheet, include_formula=include_formula)
-        )
+        result.sheets.append(_diff_sheet(old_sheet, new_sheet))
     return result
 
 
-def _row_changes(old_sheet: Sheet | None, new_sheet: Sheet | None) -> list[RowChange]:
+def _row_changes(old_sheet: TextSheet | None, new_sheet: TextSheet | None) -> list[RowChange]:
     if old_sheet is None and new_sheet is not None:
         return [
             RowChange(new_sheet.name, row.key, "added", new_row=row)
@@ -222,28 +239,31 @@ def _row_changes(old_sheet: Sheet | None, new_sheet: Sheet | None) -> list[RowCh
 
 
 def _diff_sheet(
-    old_sheet: Sheet,
-    new_sheet: Sheet,
-    *,
-    include_formula: bool,
+    old_sheet: TextSheet,
+    new_sheet: TextSheet,
 ) -> SheetDiff:
     aligned, column_changes = _align_columns(old_sheet, new_sheet)
     row_changes = _diff_rows(
         old_sheet,
         new_sheet,
         aligned,
-        include_formula=include_formula,
     )
     status = "modified" if column_changes or row_changes else "same"
-    return SheetDiff(new_sheet.name, status, column_changes, row_changes)
+    return SheetDiff(
+        new_sheet.name,
+        status,
+        new_sheet.headers,
+        column_changes,
+        row_changes,
+    )
 
 
 def _align_columns(
-    old_sheet: Sheet,
-    new_sheet: Sheet,
+    old_sheet: TextSheet,
+    new_sheet: TextSheet,
 ) -> tuple[list[_AlignedColumn], list[ColumnChange]]:
-    old_keys = old_sheet.column_keys()
-    new_keys = new_sheet.column_keys()
+    old_keys = list(old_sheet.column_keys)
+    new_keys = list(new_sheet.column_keys)
     old_key_to_index = {key: index for index, key in enumerate(old_keys)}
     new_key_to_index = {key: index for index, key in enumerate(new_keys)}
     common = set(old_keys) & set(new_keys)
@@ -390,11 +410,9 @@ def _align_columns(
 
 
 def _diff_rows(
-    old_sheet: Sheet,
-    new_sheet: Sheet,
+    old_sheet: TextSheet,
+    new_sheet: TextSheet,
     aligned: list[_AlignedColumn],
-    *,
-    include_formula: bool,
 ) -> list[RowChange]:
     old_rows = _row_identity_map(old_sheet)
     new_rows = _row_identity_map(new_sheet)
@@ -432,26 +450,14 @@ def _diff_rows(
                 continue
             old_cell = old_row.cells[old_index]
             new_cell = new_row.cells[new_index]
-            old_key = old_cell.comparison_key(
-                source_row=old_cell.formula_row or old_row.source_row or 4,
-                source_col=old_cell.formula_col or old_index + 1,
-                include_formula=include_formula,
-            )
-            new_key = new_cell.comparison_key(
-                source_row=new_cell.formula_row or new_row.source_row or 4,
-                source_col=new_cell.formula_col or new_index + 1,
-                include_formula=include_formula,
-            )
-            if old_key == new_key:
+            if old_cell == new_cell:
                 continue
             header = column.new_header or column.old_header or Header()
             cell_changes.append(
                 CellChange(
                     header.display_name(),
-                    old_cell.display(include_formula=include_formula),
-                    new_cell.display(include_formula=include_formula),
-                    old_cell.formula,
-                    new_cell.formula,
+                    old_cell,
+                    new_cell,
                 )
             )
         if cell_changes:
@@ -468,8 +474,8 @@ def _diff_rows(
     return changes
 
 
-def _row_identity_map(sheet: Sheet) -> dict[tuple[str, int], Row]:
-    return dict(zip(sheet.row_identities(), sheet.rows))
+def _row_identity_map(sheet: TextSheet) -> dict[tuple[str, int], TextRow]:
+    return {(row.key, row.occurrence): row for row in sheet.rows}
 
 
 def format_text_diff(result: DiffResult) -> str:
@@ -505,12 +511,12 @@ def format_text_diff(result: DiffResult) -> str:
             if change.kind == "added":
                 lines.append(f"@@ row {change.row} @@")
                 lines.append(f"+ row {change.row}")
-                for column, value in _row_display_values(change.new_row, result.include_formula):
+                for column, value in _row_display_values(change.new_row, sheet.columns):
                     lines.append(f"+   {column}: {value}")
             elif change.kind == "deleted":
                 lines.append(f"@@ row {change.row} @@")
                 lines.append(f"- row {change.row}")
-                for column, value in _row_display_values(change.old_row, result.include_formula):
+                for column, value in _row_display_values(change.old_row, sheet.columns):
                     lines.append(f"-   {column}: {value}")
             else:
                 lines.append(f"@@ row {change.row} @@")
@@ -524,7 +530,7 @@ def format_text_diff(result: DiffResult) -> str:
         lines.append("Warnings:")
         for issue in result.issues:
             location = " / ".join(
-                item
+                str(item)
                 for item in (
                     issue.sheet,
                     issue.row,
@@ -548,15 +554,18 @@ def _header_summary(header: Header | None) -> str:
 
 
 def _row_display_values(
-    row: Row | None,
-    include_formula: bool,
-) -> Iterator[tuple[str, str]]:
+    row: TextRow | None,
+    columns: tuple[Header, ...],
+) -> list[tuple[str, str]]:
     if row is None:
-        return
+        return []
+    values: list[tuple[str, str]] = []
     for index, cell in enumerate(row.cells):
-        if cell.is_empty():
+        if cell == "":
             continue
-        yield f"col{index + 1}", cell.display(include_formula=include_formula)
+        header = columns[index] if index < len(columns) else Header()
+        values.append((header.display_name(), cell))
+    return values
 
 
 def write_diff_excel(result: DiffResult, output_path: str | Path) -> str:
@@ -576,7 +585,7 @@ def write_diff_excel(result: DiffResult, output_path: str | Path) -> str:
     summary.append(["Metric", "Value"])
     summary.append(["Old", result.old_path or ""])
     summary.append(["New", result.new_path or ""])
-    summary.append(["Formula aware", result.include_formula])
+    summary.append(["Comparison", "Text snapshot; formulas use cached values"])
     summary.append(["Has changes", result.has_changes])
     for key, value in result.summary.items():
         summary.append([key, value])
@@ -612,13 +621,13 @@ def write_diff_excel(result: DiffResult, output_path: str | Path) -> str:
             if change.kind == "added":
                 values = " | ".join(
                     f"{name}={value}"
-                    for name, value in _row_display_values(change.new_row, result.include_formula)
+                    for name, value in _row_display_values(change.new_row, sheet.columns)
                 )
                 changes.append(["ROW_ADDED", sheet.sheet, change.row, "", "", values, ""])
             elif change.kind == "deleted":
                 values = " | ".join(
                     f"{name}={value}"
-                    for name, value in _row_display_values(change.old_row, result.include_formula)
+                    for name, value in _row_display_values(change.old_row, sheet.columns)
                 )
                 changes.append(["ROW_DELETED", sheet.sheet, change.row, "", values, "", ""])
             else:
@@ -666,7 +675,7 @@ def write_diff_excel(result: DiffResult, output_path: str | Path) -> str:
                 issue.row or "",
                 issue.column or "",
                 issue.message,
-                issue.reference or "",
+                str(issue.reference or ""),
             ]
         )
     for cell in issues[1]:

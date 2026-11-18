@@ -41,7 +41,6 @@ def build_parser() -> argparse.ArgumentParser:
     diff.add_argument("new")
     diff.add_argument("--format", choices=("text", "json", "excel"), default="text")
     diff.add_argument("--output")
-    diff.add_argument("--include-formula", action="store_true")
 
     merge = subparsers.add_parser("merge", help="Three-way merge")
     merge.add_argument("base")
@@ -112,11 +111,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "diff":
-        result = diff_files(
-            args.old,
-            args.new,
-            include_formula=args.include_formula,
-        )
+        result = diff_files(args.old, args.new)
         if args.format == "excel":
             output = args.output or str(Path(args.new).with_name(Path(args.new).stem + "_diff.xlsx"))
             print(write_diff_excel(result, output))

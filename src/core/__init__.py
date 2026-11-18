@@ -24,6 +24,15 @@ from .merge import (
     write_merge_excel,
 )
 from .operations import apply_operations
+from .text import (
+    TextColumn,
+    TextRow,
+    TextSheet,
+    TextWorkbook,
+    render_text_workbook,
+    value_to_text,
+    workbook_to_text,
+)
 
 __all__ = [
     "Cell",
@@ -46,4 +55,11 @@ __all__ = [
     "merge_files",
     "write_merge_excel",
     "apply_operations",
+    "TextColumn",
+    "TextRow",
+    "TextSheet",
+    "TextWorkbook",
+    "render_text_workbook",
+    "value_to_text",
+    "workbook_to_text",
 ]

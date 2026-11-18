@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from formula_utils import normalize_formula_for_compare, parse_cell_refs
 
 
-_EXTERNAL_REF_RE = re.compile(r"\[[^\]]+\.")
+_EXTERNAL_REF_RE = re.compile(r"\[[^\]]+\]")
 _DYNAMIC_OR_VOLATILE_FUNCTIONS = {
     "BYCOL",
     "BYROW",
@@ -111,6 +111,7 @@ def analyze_formula(
                 formula[:120],
             )
         )
+        return findings
 
     functions = _function_names(formula) & _DYNAMIC_OR_VOLATILE_FUNCTIONS
     if functions:
@@ -127,7 +128,14 @@ def analyze_formula(
     for ref in parse_cell_refs(formula):
         display_ref = ref.get("ref") or ""
         if ref.get("file"):
-            # Already covered by the external-workbook finding.
+            findings.append(
+                FormulaFinding(
+                    "external_workbook_ref",
+                    "error",
+                    "检测到跨工作簿引用；公式缓存、外链和保存兼容性风险较高。",
+                    display_ref,
+                )
+            )
             continue
         if ref.get("sheet"):
             fixed_target = bool(ref.get("row_start_abs") and ref.get("col_start_abs"))

@@ -16,7 +16,6 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.formula import ArrayFormula
 
 from .formula import (
-    FormulaFinding,
     analyze_formula,
     bind_row_local_formula,
     formula_references_sheet_column,
@@ -150,6 +149,48 @@ class Cell:
 
     def clone(self) -> "Cell":
         return replace(self)
+
+
+def cells_equal(
+    left: Cell,
+    right: Cell,
+    *,
+    left_row: int,
+    left_col: int,
+    right_row: int,
+    right_col: int,
+    include_formula: bool,
+) -> bool:
+    """Fast cell comparison with formula normalization only as a fallback."""
+    left_value = left.value if nonempty(left.value) else None
+    right_value = right.value if nonempty(right.value) else None
+    if not include_formula and (left_value is not None or right_value is not None):
+        return left_value == right_value
+    if (
+        left.formula == right.formula
+        and left.formula is not None
+        and left_row == right_row
+        and left_col == right_col
+        and left_value == right_value
+    ):
+        return True
+    if (
+        left.formula is None
+        and right.formula is None
+        and left_row == right_row
+        and left_col == right_col
+        and left_value == right_value
+    ):
+        return True
+    return left.comparison_key(
+        source_row=left_row,
+        source_col=left_col,
+        include_formula=include_formula,
+    ) == right.comparison_key(
+        source_row=right_row,
+        source_col=right_col,
+        include_formula=include_formula,
+    )
 
 
 @dataclass(slots=True)
@@ -586,6 +627,7 @@ class WorkbookDocument:
     def validate(self, *, clean_first: bool = False) -> ValidationReport:
         report = ValidationReport(files=1, sheets=len(self.sheets))
         report.extend(self.load_issues)
+        formula_groups: dict[tuple[str, str, str, str], dict[str, Any]] = {}
         dropped_rows: list[int] = []
         dropped_cols: list[str] = []
         if clean_first:
@@ -609,7 +651,23 @@ class WorkbookDocument:
                             source_col=cell.formula_col or index + 1,
                             is_array=cell.is_array,
                         )
-                        report.extend(_formula_issues(sheet.name, row.key, column, cell, findings))
+                        for finding in findings:
+                            key = (
+                                sheet.name,
+                                column.display_name(),
+                                finding.code,
+                                finding.severity,
+                            )
+                            group = formula_groups.get(key)
+                            if group is None:
+                                formula_groups[key] = {
+                                    "count": 1,
+                                    "row": cell.formula_row,
+                                    "message": finding.message,
+                                    "reference": finding.reference or cell.formula,
+                                }
+                            else:
+                                group["count"] += 1
                     if text(cell.value) in _ERROR_VALUES:
                         report.issues.append(
                             Issue(
@@ -621,6 +679,22 @@ class WorkbookDocument:
                                 column=column.display_name(),
                             )
                         )
+        for (sheet_name, column_name, code, severity), group in formula_groups.items():
+            count = group["count"]
+            message = group["message"]
+            if count > 1:
+                message += f" 共 {count} 个单元格触发。"
+            report.issues.append(
+                Issue(
+                    code,
+                    severity,
+                    message,
+                    sheet=sheet_name,
+                    row=group["row"],
+                    column=column_name,
+                    reference=group["reference"],
+                )
+            )
         return report
 
     def save(self, path: str | Path) -> str:
@@ -817,7 +891,7 @@ def _validate_headers(sheet: Sheet) -> list[Issue]:
                     + ", ".join(get_column_letter(index + 1) for index in indexes),
                     sheet=sheet.name,
                     column=get_column_letter(indexes[0] + 1),
-                    reference=value,
+                    reference=" | ".join(value) if isinstance(value, tuple) else value,
                 )
             )
     return issues
@@ -842,29 +916,6 @@ def _validate_rows(sheet: Sheet) -> list[Issue]:
             )
         )
     return issues
-
-
-def _formula_issues(
-    sheet_name: str,
-    row_key: str,
-    header: Header,
-    cell: Cell,
-    findings: Sequence[FormulaFinding],
-) -> list[Issue]:
-    result: list[Issue] = []
-    for finding in findings:
-        result.append(
-            Issue(
-                finding.code,
-                finding.severity,
-                finding.message,
-                sheet=sheet_name,
-                row=cell.formula_row,
-                column=header.display_name(),
-                reference=finding.reference or cell.formula,
-            )
-        )
-    return result
 
 
 def _write_sheet(wb: Workbook, sheet: Sheet) -> None:

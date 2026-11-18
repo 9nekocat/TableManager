@@ -11,7 +11,18 @@ from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 
 from .diff import ColumnChange, _align_columns
-from .model import Cell, Header, Issue, Row, Sheet, WorkbookDocument, nonempty, text
+from .model import (
+    Cell,
+    Header,
+    Issue,
+    Row,
+    Sheet,
+    WorkbookDocument,
+    cells_equal,
+    nonempty,
+    text,
+)
+from .text import sheet_headers_to_text
 
 
 VALID_STRATEGIES = {"fail", "ours", "theirs"}
@@ -118,6 +129,7 @@ def merge_documents(
     theirs: WorkbookDocument,
     *,
     strategy: str = "fail",
+    validate_output: bool = True,
 ) -> MergeResult:
     if strategy not in VALID_STRATEGIES:
         raise ValueError(
@@ -143,8 +155,11 @@ def merge_documents(
             result,
         )
 
-    report = merged.validate(clean_first=True)
-    result.issues.extend(report.issues)
+    if validate_output:
+        report = merged.validate(clean_first=True)
+        result.issues.extend(report.issues)
+    else:
+        merged.clean()
     return result
 
 
@@ -245,13 +260,13 @@ def _sheet_equal(left: Sheet, right: Sheet) -> bool:
         if left_row.key != right_row.key:
             return False
         for index, (left_cell, right_cell) in enumerate(zip(left_row.cells, right_row.cells)):
-            if left_cell.comparison_key(
-                source_row=left_cell.formula_row or left_row.source_row or 4,
-                source_col=left_cell.formula_col or index + 1,
-                include_formula=True,
-            ) != right_cell.comparison_key(
-                source_row=right_cell.formula_row or right_row.source_row or 4,
-                source_col=right_cell.formula_col or index + 1,
+            if not cells_equal(
+                left_cell,
+                right_cell,
+                left_row=left_cell.formula_row or left_row.source_row or 4,
+                left_col=left_cell.formula_col or index + 1,
+                right_row=right_cell.formula_row or right_row.source_row or 4,
+                right_col=right_cell.formula_col or index + 1,
                 include_formula=True,
             ):
                 return False
@@ -259,7 +274,10 @@ def _sheet_equal(left: Sheet, right: Sheet) -> bool:
 
 
 def _base_column_mapping(base: Sheet, branch: Sheet) -> dict[int, tuple[int | None, Header]]:
-    aligned, _ = _align_columns(base, branch)
+    aligned, _ = _align_columns(
+        sheet_headers_to_text(base),
+        sheet_headers_to_text(branch),
+    )
     result: dict[int, tuple[int | None, Header]] = {}
     for item in aligned:
         if item.old_index is None:
@@ -292,13 +310,13 @@ def _column_changed(
             continue
         base_cell = base_row.cells[base_index]
         branch_cell = branch_row.cells[branch_index]
-        if base_cell.comparison_key(
-            source_row=base_cell.formula_row or base_row.source_row or 4,
-            source_col=base_cell.formula_col or base_index + 1,
-            include_formula=True,
-        ) != branch_cell.comparison_key(
-            source_row=branch_cell.formula_row or branch_row.source_row or 4,
-            source_col=branch_cell.formula_col or branch_index + 1,
+        if not cells_equal(
+            base_cell,
+            branch_cell,
+            left_row=base_cell.formula_row or base_row.source_row or 4,
+            left_col=base_cell.formula_col or base_index + 1,
+            right_row=branch_cell.formula_row or branch_row.source_row or 4,
+            right_col=branch_cell.formula_col or branch_index + 1,
             include_formula=True,
         ):
             return True
@@ -514,14 +532,6 @@ def _remap_row(row: Row, source_to_output: Mapping[int, int], width: int) -> Row
     return Row(row.key, cells, row.source_row)
 
 
-def _cell_key(cell: Cell, row: Row | None, source_index: int | None) -> tuple[Any, ...]:
-    return cell.comparison_key(
-        source_row=cell.formula_row or (row.source_row if row else 4) or 4,
-        source_col=cell.formula_col or (source_index + 1 if source_index is not None else 1),
-        include_formula=True,
-    )
-
-
 def _row_changed(
     base_row: Row,
     branch_row: Row,
@@ -532,14 +542,14 @@ def _row_changed(
     for branch_index, base_index in branch_to_base_columns.items():
         if branch_index >= len(branch_row.cells) or base_index >= len(base_row.cells):
             continue
-        if _cell_key(
+        if not cells_equal(
             branch_row.cells[branch_index],
-            branch_row,
-            branch_index,
-        ) != _cell_key(
             base_row.cells[base_index],
-            base_row,
-            base_index,
+            left_row=branch_row.cells[branch_index].formula_row or branch_row.source_row or 4,
+            left_col=branch_row.cells[branch_index].formula_col or branch_index + 1,
+            right_row=base_row.cells[base_index].formula_row or base_row.source_row or 4,
+            right_col=base_row.cells[base_index].formula_col or base_index + 1,
+            include_formula=True,
         ):
             return True
     return False
@@ -560,12 +570,48 @@ def _merge_cell(
     theirs_index: int | None,
     result: MergeResult,
 ) -> Cell:
-    base_key = _cell_key(base_cell, base_row, base_index)
-    ours_key = _cell_key(ours_cell, ours_row, ours_index)
-    theirs_key = _cell_key(theirs_cell, theirs_row, theirs_index)
-    if ours_key == theirs_key:
+    base_coords = (
+        base_cell.formula_row or (base_row.source_row if base_row else 4) or 4,
+        base_cell.formula_col or (base_index + 1 if base_index is not None else 1),
+    )
+    ours_coords = (
+        ours_cell.formula_row or (ours_row.source_row if ours_row else 4) or 4,
+        ours_cell.formula_col or (ours_index + 1 if ours_index is not None else 1),
+    )
+    theirs_coords = (
+        theirs_cell.formula_row or (theirs_row.source_row if theirs_row else 4) or 4,
+        theirs_cell.formula_col or (theirs_index + 1 if theirs_index is not None else 1),
+    )
+    ours_equals_theirs = cells_equal(
+        ours_cell,
+        theirs_cell,
+        left_row=ours_coords[0],
+        left_col=ours_coords[1],
+        right_row=theirs_coords[0],
+        right_col=theirs_coords[1],
+        include_formula=True,
+    )
+    ours_equals_base = cells_equal(
+        ours_cell,
+        base_cell,
+        left_row=ours_coords[0],
+        left_col=ours_coords[1],
+        right_row=base_coords[0],
+        right_col=base_coords[1],
+        include_formula=True,
+    )
+    theirs_equals_base = cells_equal(
+        theirs_cell,
+        base_cell,
+        left_row=theirs_coords[0],
+        left_col=theirs_coords[1],
+        right_row=base_coords[0],
+        right_col=base_coords[1],
+        include_formula=True,
+    )
+    if ours_equals_theirs:
         chosen = ours_cell if not ours_cell.is_empty() else theirs_cell
-        if base_key != ours_key:
+        if not ours_equals_base:
             result.changes.append(
                 MergeChange(
                     sheet_name,
@@ -579,8 +625,8 @@ def _merge_cell(
                 )
             )
         return chosen.clone()
-    if ours_key == base_key:
-        if theirs_key != base_key:
+    if ours_equals_base:
+        if not theirs_equals_base:
             result.changes.append(
                 MergeChange(
                     sheet_name,
@@ -595,7 +641,7 @@ def _merge_cell(
                 )
             )
         return theirs_cell.clone()
-    if theirs_key == base_key:
+    if theirs_equals_base:
         result.changes.append(
             MergeChange(
                 sheet_name,
@@ -956,7 +1002,7 @@ def write_merge_excel(
                 issue.row or "",
                 issue.column or "",
                 issue.message,
-                issue.reference or "",
+                str(issue.reference or ""),
             ]
         )
     for cell in issues_sheet[1]:

@@ -4,7 +4,7 @@ UE DataTable 配置表管理工具。提供表格浏览、校验、SVN 更新、
 
 ## 重构中的核心
 
-`src/core/` 提供不依赖 GUI、SVN 和 Excel COM 的纯数据核心，支持校验、CRUD、两文件差异和三路合并。设计与审查结论见 [docs/core-refactor-review.md](docs/core-refactor-review.md)。
+`src/core/` 提供不依赖 GUI、SVN 和 Excel COM 的纯数据核心，支持校验、CRUD、两文件差异和三路合并。差异会先把工作簿转成纯文本快照，公式直接使用 Excel 缓存值。设计与审查结论见 [docs/core-refactor-review.md](docs/core-refactor-review.md)，真实表性能与 Rust 预估见 [docs/real-table-benchmark-rust-estimate.md](docs/real-table-benchmark-rust-estimate.md)。
 
 开发入口：
 
