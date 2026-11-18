@@ -2,6 +2,18 @@
 
 UE DataTable 配置表管理工具。提供表格浏览、校验、SVN 更新、Excel 冲突比对与合并功能。
 
+## 重构中的核心
+
+`src/core/` 提供不依赖 GUI、SVN 和 Excel COM 的纯数据核心，支持校验、CRUD、两文件差异和三路合并。设计与审查结论见 [docs/core-refactor-review.md](docs/core-refactor-review.md)。
+
+开发入口：
+
+```powershell
+python src/core_cli.py validate <file.xlsx> --json --clean
+python src/core_cli.py diff <old.xlsx> <new.xlsx> --format text
+python src/core_cli.py merge <base.xlsx> <ours.xlsx> <theirs.xlsx> --output <merged.xlsx>
+```
+
 ## 环境准备
 
 ### 1. SlikSVN（SVN 命令行工具）
