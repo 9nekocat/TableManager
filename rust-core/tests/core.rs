@@ -428,3 +428,39 @@ fn merge_excel_cleans_blank_rows_and_is_readable() {
     assert_eq!(reopened.sheets[0].rows.len(), 1);
     let _ = std::fs::remove_file(path);
 }
+
+#[test]
+fn merge_writes_literal_formula_source_as_quoted_text() {
+    let mut base = table(
+        "base",
+        &[
+            ("行名", "Row", "FString"),
+            ("公式源", "FormulaSource", "FString"),
+        ],
+        &[("A", &[("Row", "A"), ("FormulaSource", "placeholder")])],
+    );
+    base.sheets[0].rows[0].cells[1] = Cell {
+        value: "=A,B,C".to_string(),
+        formula: None,
+    };
+    let ours = base.clone();
+    let theirs = base.clone();
+    let result = merge_workbooks(&base, &ours, &theirs, MergeStrategy::Fail);
+    let path = std::env::current_dir()
+        .unwrap()
+        .join("target")
+        .join(format!(
+            "table-core-literal-formula-{}-{}.xlsx",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+    write_merge_excel(&result, &path, false).unwrap();
+    let reopened = table_core::model::read_workbook(&path).unwrap();
+    let cell = &reopened.sheets[0].rows[0].cells[1];
+    assert_eq!(cell.value, "=A,B,C");
+    assert!(cell.formula.is_none());
+    let _ = std::fs::remove_file(path);
+}

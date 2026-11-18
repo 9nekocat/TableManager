@@ -230,6 +230,7 @@ pub fn write_merge_excel(
         .set_background_color("#4472C4");
     let conflict_format = Format::new().set_background_color("#FFC7CE");
     let change_format = Format::new().set_background_color("#FFF2CC");
+    let literal_formula_format = Format::new().set_quote_prefix().set_num_format("@");
 
     for sheet in &result.workbook.sheets {
         let worksheet = workbook.add_worksheet();
@@ -259,7 +260,14 @@ pub fn write_merge_excel(
                     };
                     worksheet.write_formula(output_row, column as u16, formula.as_str())?;
                 } else if column == 0 && cell.value.is_empty() && !row.key.is_empty() {
-                    write_typed_value(worksheet, output_row, 0, &row.key, sheet.headers.first())?;
+                    write_typed_value(
+                        worksheet,
+                        output_row,
+                        0,
+                        &row.key,
+                        sheet.headers.first(),
+                        &literal_formula_format,
+                    )?;
                 } else if !cell.value.is_empty() {
                     write_typed_value(
                         worksheet,
@@ -267,6 +275,7 @@ pub fn write_merge_excel(
                         column as u16,
                         &cell.value,
                         sheet.headers.get(column),
+                        &literal_formula_format,
                     )?;
                 }
             }
@@ -411,6 +420,7 @@ fn write_typed_value(
     column: u16,
     value: &str,
     header: Option<&crate::model::Header>,
+    literal_formula_format: &Format,
 ) -> Result<()> {
     let type_name = header
         .map(|header| header.type_name.to_ascii_lowercase())
@@ -433,6 +443,13 @@ fn write_typed_value(
         worksheet.write_boolean(row, column, boolean)?;
         return Ok(());
     }
-    worksheet.write_string(row, column, value)?;
+    let value = value
+        .strip_prefix("'=")
+        .map_or_else(|| value.to_string(), |rest| format!("={rest}"));
+    if value.starts_with('=') {
+        worksheet.write_string_with_format(row, column, &value, literal_formula_format)?;
+    } else {
+        worksheet.write_string(row, column, &value)?;
+    }
     Ok(())
 }
