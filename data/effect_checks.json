@@ -1,0 +1,195 @@
+{
+  "_comment": "Effect.xlsx 专用检查规则。语义来源：脚本配置方法.xlsx[效果表（Effect）]（一手文档）+ 数据实证。params 中 kind=ref 的位置做悬空引用检查（targets 为候选目标表列表，target.column 可指定按目标表非 RowName 列匹配），kind=literal 的位置仅作文档、不检查。pos 支持数字或 \"N+\"（第 N 个及以后全部）。condition_targets 为条件列(ConditionIDs)的全局目标。level: error|warning（悬空引用的严重度）。",
+  "file": "Effect.xlsx",
+  "type_column": "Type",
+  "params_column": "Params",
+  "condition_column": "ConditionIDs",
+  "condition_targets": [
+    { "file": "Localization/ShopFilterCondition.xlsx" }
+  ],
+  "types": {
+    "31": {
+      "name": "结算本卡待领金币",
+      "params": [
+        { "pos": 1, "name": "单份金币EffectNumber ID", "kind": "ref", "targets": [{ "file": "Effectnumber.xlsx" }] }
+      ]
+    },
+    "1": {
+      "name": "打伤害",
+      "params": [
+        { "pos": 1, "name": "伤害类型", "kind": "literal" },
+        { "pos": 2, "name": "伤害值", "kind": "literal" }
+      ]
+    },
+    "2": {
+      "name": "修改属性",
+      "level": "warning",
+      "params": [
+        { "pos": 1, "name": "属性Tag", "kind": "ref", "targets": [{ "file": "Localization/AttributeTable.xlsx", "column": "AttributeName" }] },
+        { "pos": 2, "name": "修改值", "kind": "literal" }
+      ]
+    },
+    "3": {
+      "name": "添加BUFF",
+      "params": [
+        { "pos": 1, "name": "BUFF添加类型", "kind": "literal" },
+        { "pos": 2, "name": "BUFF ID", "kind": "ref", "targets": [{ "file": "Localization/Buff.xlsx" }] },
+        { "pos": 3, "name": "时间/层数", "kind": "literal" }
+      ]
+    },
+    "4": {
+      "name": "召唤",
+      "params": [
+        { "pos": 1, "name": "召唤物ID", "kind": "ref", "targets": [{ "file": "Localization/Drone.xlsx" }] }
+      ]
+    },
+    "5": {
+      "name": "翻倍效果",
+      "params": [
+        { "pos": 1, "name": "效果数字ID", "kind": "ref", "targets": [{ "file": "Effectnumber.xlsx" }] },
+        { "pos": "2+", "name": "效果ID", "kind": "ref", "targets": [{ "file": "Effect.xlsx" }] }
+      ]
+    },
+    "6": {
+      "name": "多次效果",
+      "params": [
+        { "pos": 1, "name": "效果数字ID", "kind": "ref", "targets": [{ "file": "Effectnumber.xlsx" }] },
+        { "pos": 2, "name": "间隔时间", "kind": "literal" },
+        { "pos": "3+", "name": "效果ID", "kind": "ref", "targets": [{ "file": "Effect.xlsx" }] }
+      ]
+    },
+    "7": {
+      "name": "光环效果",
+      "params": [
+        { "pos": 1, "name": "目标ID", "kind": "ref", "targets": [{ "file": "Target.xlsx" }] },
+        { "pos": "2+", "name": "效果ID", "kind": "ref", "targets": [{ "file": "Effect.xlsx" }] }
+      ]
+    },
+    "8": {
+      "name": "概率效果（效果ID/概率交替）",
+      "params": [
+        { "pos": 1, "name": "效果ID", "kind": "ref", "targets": [{ "file": "Effect.xlsx" }] },
+        { "pos": 2, "name": "概率", "kind": "literal" },
+        { "pos": 3, "name": "效果ID", "kind": "ref", "targets": [{ "file": "Effect.xlsx" }] },
+        { "pos": 4, "name": "概率", "kind": "literal" },
+        { "pos": 5, "name": "效果ID", "kind": "ref", "targets": [{ "file": "Effect.xlsx" }] },
+        { "pos": 6, "name": "概率", "kind": "literal" },
+        { "pos": 7, "name": "效果ID", "kind": "ref", "targets": [{ "file": "Effect.xlsx" }] },
+        { "pos": 8, "name": "概率", "kind": "literal" }
+      ]
+    },
+    "9": {
+      "name": "事件效果（配置于[事件效果]子表）",
+      "params": [
+        { "pos": 1, "name": "事件ID", "kind": "ref", "targets": [{ "file": "Event.xlsx" }] },
+        { "pos": 2, "name": "目标ID", "kind": "ref", "targets": [{ "file": "Target.xlsx" }] },
+        { "pos": "3+", "name": "效果ID", "kind": "ref", "targets": [{ "file": "Effect.xlsx" }] }
+      ]
+    },
+    "10": {
+      "name": "投掷效果",
+      "params": [
+        { "pos": 1, "name": "投掷物ID", "kind": "ref", "targets": [{ "file": "ProjectileTable.xlsx" }] },
+        { "pos": 2, "name": "释放间隔", "kind": "literal" },
+        { "pos": 3, "name": "释放数量", "kind": "literal" }
+      ]
+    },
+    "11": {
+      "name": "充能",
+      "params": [
+        { "pos": 1, "name": "时间", "kind": "literal" }
+      ]
+    },
+    "12": {
+      "name": "切换卡牌(被动替换)",
+      "params": [
+        { "pos": 1, "name": "卡牌ID", "kind": "ref", "targets": [{ "file": "Localization/Card.xlsx" }] },
+        { "pos": 2, "name": "是否保留客制化属性", "kind": "literal" },
+        { "pos": "3+", "name": "筛选条件", "kind": "ref", "targets": [{ "file": "Localization/ShopFilterCondition.xlsx" }] }
+      ]
+    },
+    "13": {
+      "name": "霸体效果",
+      "params": [
+        { "pos": 1, "name": "buff tag", "kind": "literal" }
+      ]
+    },
+    "14": {
+      "name": "动画暂停",
+      "params": []
+    },
+    "15": {
+      "name": "派发事件消息",
+      "params": [
+        { "pos": 1, "name": "派发事件类型", "kind": "literal" },
+        { "pos": 2, "name": "参数", "kind": "literal" }
+      ]
+    },
+    "16": {
+      "name": "获得物品",
+      "params": [
+        { "pos": 1, "name": "获得数量", "kind": "literal" },
+        { "pos": "2+", "name": "物品过滤条件", "kind": "ref", "targets": [{ "file": "Localization/ShopFilterCondition.xlsx" }] }
+      ]
+    },
+    "17": {
+      "name": "给属性赋最大/最小值",
+      "level": "warning",
+      "params": [
+        { "pos": 1, "name": "最大值/最小值", "kind": "literal" },
+        { "pos": 2, "name": "被赋值属性ID", "kind": "ref", "targets": [{ "file": "Localization/AttributeTable.xlsx" }] },
+        { "pos": 3, "name": "万分比/整数", "kind": "literal" },
+        { "pos": 4, "name": "赋值", "kind": "literal" },
+        { "pos": 5, "name": "目标属性ID", "kind": "ref", "targets": [{ "file": "Localization/AttributeTable.xlsx" }] }
+      ]
+    },
+    "18": {
+      "name": "发现",
+      "params": [
+        { "pos": 1, "name": "卡牌数量", "kind": "literal" },
+        { "pos": "2+", "name": "筛选条件", "kind": "ref", "targets": [{ "file": "Localization/ShopFilterCondition.xlsx" }] }
+      ]
+    },
+    "19": {
+      "name": "选取目标",
+      "params": [
+        { "pos": 1, "name": "目标target", "kind": "ref", "targets": [{ "file": "Target.xlsx" }] }
+      ]
+    },
+    "20": {
+      "name": "解锁/上锁",
+      "params": [
+        { "pos": 1, "name": "解锁/上锁", "kind": "literal" }
+      ]
+    },
+    "21": {
+      "name": "冷却停止",
+      "params": [
+        { "pos": 1, "name": "时间", "kind": "literal" }
+      ]
+    },
+    "22": {
+      "name": "沉默",
+      "params": [
+        { "pos": 1, "name": "时间", "kind": "literal" }
+      ]
+    },
+    "23": {
+      "name": "侧框升级卡牌",
+      "params": [
+        { "pos": 1, "name": "提升的等级", "kind": "literal" },
+        { "pos": "2+", "name": "放入筛选条件", "kind": "ref", "targets": [{ "file": "Localization/ShopFilterCondition.xlsx" }] }
+      ]
+    },
+    "24": {
+      "name": "侧框替换卡牌(交互替换)",
+      "params": [
+        { "pos": 1, "name": "最大放入稀有度", "kind": "literal" },
+        { "pos": 2, "name": "稀有度变化值", "kind": "literal" },
+        { "pos": 3, "name": "是否同部位", "kind": "literal" },
+        { "pos": 4, "name": "是否同流派", "kind": "literal" },
+        { "pos": "5+", "name": "结果卡筛选条件", "kind": "ref", "targets": [{ "file": "Localization/ShopFilterCondition.xlsx" }] }
+      ]
+    }
+  }
+}

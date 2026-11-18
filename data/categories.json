@@ -1,0 +1,100 @@
+{
+    "_comment": "Table category config. Paths relative to DataTable/Raw/. Edit this file to re-categorize tables.",
+    "_format": "Each category has display_name, description, and files list.",
+    "categories": {
+        "Cards": {
+            "display_name": "卡牌",
+            "description": "Card definitions, shapes, attributes, text",
+            "files": [
+                "CardTable.xlsx",
+                "CardShape.xlsx",
+                "Localization/Card.xlsx",
+                "Localization/AttributeTable.xlsx"
+            ]
+        },
+        "Combat": {
+            "display_name": "战斗",
+            "description": "Effects, targets, buffs, event pools, drops",
+            "files": [
+                "Effect.xlsx",
+                "Effectnumber.xlsx",
+                "Target.xlsx",
+                "Localization/Buff.xlsx",
+                "EventTypePool.xlsx",
+                "BattleDropGroupType.xlsx"
+            ]
+        },
+        "Events": {
+            "display_name": "事件",
+            "description": "Event definitions and visual styles",
+            "files": [
+                "Event.xlsx",
+                "EventStyle.xlsx"
+            ]
+        },
+        "Dialogue": {
+            "display_name": "对话",
+            "description": "Dialogue actions, conditions, effects, content",
+            "files": [
+                "DialogEffectData.xlsx",
+                "DialogActionData.xlsx",
+                "DialogConditionData.xlsx",
+                "Localization/DialogData2.xlsx"
+            ]
+        },
+        "StoryMap": {
+            "display_name": "剧情地图",
+            "description": "Story map points, regions, rooms, interactables",
+            "files": [
+                "StoryMapPointData.xlsx",
+                "StoryMapRegionData.xlsx",
+                "StoryMapRoomData.xlsx",
+                "StoryInteractableRow.xlsx"
+            ]
+        },
+        "Metadata": {
+            "display_name": "元数据",
+            "description": "Tags, flags, gameplay tag tables",
+            "files": [
+                "GameplayTagTableRow.xlsx",
+                "FlagConfigRow.xlsx",
+                "Localization/Tag.xlsx"
+            ]
+        },
+        "Localization": {
+            "display_name": "本地化",
+            "description": "Localized text for mecha, drones, shops, etc.",
+            "files": [
+                "Localization/MechaTable.xlsx",
+                "Localization/Drone.xlsx",
+                "Localization/RavenPilotSkillData.xlsx",
+                "Localization/ShopFilterCondition.xlsx",
+                "Localization/TacticalEncounterData.xlsx",
+                "Localization/PvpCatTableTable.xlsx",
+                "Localization/CatSkinDisplayTable.xlsx"
+            ]
+        },
+        "Projectiles": {
+            "display_name": "弹射物",
+            "description": "Projectile definitions",
+            "files": [
+                "ProjectileTable.xlsx"
+            ]
+        },
+        "Matchmaking": {
+            "display_name": "匹配筛查",
+            "description": "Match-pool screening rules exported to CatServer",
+            "files": [
+                "MatchPoolConstraint.xlsx"
+            ]
+        }
+    },
+    "uncategorized": {
+        "display_name": "参考 / 设计文档",
+        "description": "Non-DataTable files (design docs, not imported to UE)",
+        "files": [
+            "装备2.0.xlsx",
+            "卡牌文本需求.xlsx"
+        ]
+    }
+}

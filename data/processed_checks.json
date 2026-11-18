@@ -1,0 +1,265 @@
+{
+  "_comment": "Processed 导出数据（A:/DataTable/Processed/DT_*.json）引用检查规则。tables: 逻辑表名 → 导出文件与 ID 字段；field_rules: 字段级引用（字段缺失自动跳过）；positional_rules: 按导出枚举名的位置参数规则（语义来源：脚本配置方法.xlsx），pos 支持数字或 \"N+\"。targets 为候选列表，target.column 可按目标表非 ID 字段匹配（如 AttributeName）。",
+  "tables": {
+    "Effect": { "file": "DT_RavenEffectDataTable.json", "id_field": "ID" },
+    "Event": { "file": "DT_RavenEventDataTable.json", "id_field": "ID" },
+    "Target": { "file": "DT_RavenTargetDataTable.json", "id_field": "TargetId" },
+    "EffectNumber": { "file": "DT_RavenEffectNumberDataTable.json", "id_field": "ID" },
+    "Buff": { "file": "DT_RavenBuffDataTable.json", "id_field": "BuffID" },
+    "Card": { "file": "DT_CardDataTable.json", "id_field": "CardId" },
+    "CardShape": { "file": "DT_CardShapeDataTable.json", "id_field": "ShapeId" },
+    "Drone": { "file": "DT_DroneDataTable.json", "id_field": "Id" },
+    "Projectile": { "file": "DT_ProjectileDataTable.json", "id_field": "ProjectileId" },
+    "ShopFilter": { "file": "DT_ShopFilterConditionTable.json", "id_field": "FilterConditionID" },
+    "Tag": { "file": "DT_TagDataTable.json", "id_field": "TagId" },
+    "Attribute": { "file": "DT_AttributeDataTable.json", "id_field": "AttributeId" },
+    "DropGroup": { "file": "DT_BattleDropGroupTypeTable.json", "id_field": "DropGroupID" },
+    "EventStyle": { "file": "DT_EventStyleTable.json", "id_field": "StyleID" },
+    "EventTypePool": { "file": "DT_EventTypePoolTable.json", "id_field": "Name" },
+    "Mecha": { "file": "DT_MechaDataTable.json", "id_field": "MechaId" },
+    "PvpCat": { "file": "DT_PvpCatTableTable.json", "id_field": "CatId" },
+    "PilotSkill": { "file": "DT_RavenPilotSkillDataTable.json", "id_field": "SkillId" },
+    "CatSkin": { "file": "DT_CatSkinDisplayDataTable.json", "id_field": "SkinAssetId" },
+    "Dialog": { "file": "DT_DialogData2Table.json", "id_field": "DialogID" },
+    "DialogAction": { "file": "DT_DialogActionDataTable.json", "id_field": "ActionID" },
+    "DialogCondition": { "file": "DT_DialogConditionDataTable.json", "id_field": "ConditionID" },
+    "MapPoint": { "file": "DT_StoryMapPointDataTable.json", "id_field": "TypeID" },
+    "MapRoom": { "file": "DT_StoryMapRoomDataTable.json", "id_field": "RoomID" },
+    "MapRegion": { "file": "DT_StoryMapRegionDataTable.json", "id_field": "RegionID" },
+    "Interactable": { "file": "DT_StoryInteractableRowTable.json", "id_field": "ObjID" },
+    "TacticalEncounter": { "file": "DT_TacticalEncounterDataTable.json", "id_field": "TacticalEncounterID" },
+    "FlagConfig": { "file": "DT_FlagConfigRowTable.json", "id_field": "FlagID" }
+  },
+  "field_rules": [
+    { "name": "卡牌-效果", "table": "Card", "fields": ["ActiveEffectIds", "PassiveEffectIds"], "targets": [{ "table": "Effect" }, { "table": "PilotSkill" }] },
+    { "name": "卡牌-标签", "table": "Card", "fields": ["Tags"], "targets": [{ "table": "Tag" }] },
+    { "name": "卡牌-形状", "table": "Card", "fields": ["ShapeId"], "targets": [{ "table": "CardShape" }] },
+    { "name": "Buff-效果", "table": "Buff", "fields": ["EffectId"], "targets": [{ "table": "Effect" }] },
+    { "name": "事件-目标", "table": "Event", "fields": ["SourceID"], "targets": [{ "table": "Target" }] },
+    { "name": "事件-触发条件", "table": "Event", "fields": ["TriggerConditionIDs"], "targets": [{ "table": "ShopFilter" }] },
+    { "name": "事件池-事件", "table": "EventTypePool", "fields": ["EventID"], "targets": [{ "table": "TacticalEncounter" }] },
+    { "name": "掉落组-物品筛选", "table": "DropGroup", "fields": ["ItemFilterConditions"], "targets": [{ "table": "ShopFilter" }] },
+    { "name": "掉落组-属性", "table": "DropGroup", "fields": ["AttributeList"], "targets": [{ "table": "Attribute" }] },
+    { "name": "战术事件-样式", "table": "TacticalEncounter", "fields": ["StyleID"], "targets": [{ "table": "EventStyle" }] },
+    { "name": "战术事件-出现条件", "table": "TacticalEncounter", "fields": ["EventAppearConditionIDs"], "targets": [{ "table": "ShopFilter" }] },
+    { "name": "对话-条件", "table": "Dialog", "fields": ["ConditionID"], "targets": [{ "table": "DialogCondition" }] },
+    { "name": "对话-动作", "table": "Dialog", "fields": ["Actions"], "targets": [{ "table": "DialogAction" }] },
+    { "name": "对话-跳转", "table": "Dialog", "fields": ["NextDialogID", "OptionChildrenID"], "targets": [{ "table": "Dialog" }] },
+    { "name": "地图点位-房间池", "table": "MapPoint", "fields": ["ValidRoomData"], "targets": [{ "table": "MapRoom" }] },
+    { "name": "机甲-卡牌列表", "table": "Mecha", "fields": ["CardList"], "targets": [{ "table": "Card" }] },
+    { "name": "机甲-掉落组", "table": "Mecha", "fields": ["WinDropGroup", "LossDropGroup"], "targets": [{ "table": "DropGroup" }] },
+    { "name": "无人机-卡牌", "table": "Drone", "fields": ["CardIds"], "targets": [{ "table": "Card" }] },
+    { "name": "机师技能-效果", "table": "PilotSkill", "fields": ["EffectIds"], "targets": [{ "table": "Effect" }] },
+    { "name": "猫-技能卡牌", "table": "PvpCat", "fields": ["SkillCardId"], "targets": [{ "table": "Card" }] },
+    { "name": "投掷物-效果", "table": "Projectile", "fields": ["EffectId"], "targets": [{ "table": "Effect" }] },
+    { "name": "猫皮肤-猫", "table": "CatSkin", "fields": ["CatId"], "targets": [{ "table": "PvpCat" }] },
+    { "name": "效果-条件", "table": "Effect", "fields": ["ConditionIDs"], "targets": [{ "table": "ShopFilter" }] }
+  ],
+  "positional_rules": [
+    {
+      "table": "Effect",
+      "type_field": "Type",
+      "params_field": "Params",
+      "types": {
+        "ECardEffectType::SettlePendingGold": {
+          "name": "结算本卡待领金币",
+          "params": [
+            { "pos": 1, "name": "单份金币EffectNumber ID", "targets": [{ "table": "EffectNumber" }] }
+          ]
+        },
+        "ECardEffectType::Event": {
+          "name": "事件效果",
+          "params": [
+            { "pos": 1, "name": "事件ID", "targets": [{ "table": "Event" }] },
+            { "pos": 2, "name": "目标ID", "targets": [{ "table": "Target" }] },
+            { "pos": "3+", "name": "效果ID", "targets": [{ "table": "Effect" }] }
+          ]
+        },
+        "ECardEffectType::Pow": {
+          "name": "翻倍效果",
+          "params": [
+            { "pos": 1, "name": "效果数字ID", "targets": [{ "table": "EffectNumber" }] },
+            { "pos": "2+", "name": "效果ID", "targets": [{ "table": "Effect" }] }
+          ]
+        },
+        "ECardEffectType::Multi": {
+          "name": "多次效果",
+          "params": [
+            { "pos": 1, "name": "效果数字ID", "targets": [{ "table": "EffectNumber" }] },
+            { "pos": "3+", "name": "效果ID", "targets": [{ "table": "Effect" }] }
+          ]
+        },
+        "ECardEffectType::Halo": {
+          "name": "光环效果",
+          "params": [
+            { "pos": 1, "name": "目标ID", "targets": [{ "table": "Target" }] },
+            { "pos": "2+", "name": "效果ID", "targets": [{ "table": "Effect" }] }
+          ]
+        },
+        "ECardEffectType::Chance": {
+          "name": "概率效果（效果ID/概率交替）",
+          "params": [
+            { "pos": 1, "name": "效果ID", "targets": [{ "table": "Effect" }] },
+            { "pos": 3, "name": "效果ID", "targets": [{ "table": "Effect" }] },
+            { "pos": 5, "name": "效果ID", "targets": [{ "table": "Effect" }] },
+            { "pos": 7, "name": "效果ID", "targets": [{ "table": "Effect" }] }
+          ]
+        },
+        "ECardEffectType::Buff": {
+          "name": "添加BUFF",
+          "params": [
+            { "pos": 2, "name": "BUFF ID", "targets": [{ "table": "Buff" }] }
+          ]
+        },
+        "ECardEffectType::Discovery": {
+          "name": "发现",
+          "params": [
+            { "pos": "2+", "name": "筛选条件", "targets": [{ "table": "ShopFilter" }] }
+          ]
+        },
+        "ECardEffectType::Summon": {
+          "name": "召唤",
+          "params": [
+            { "pos": 1, "name": "召唤物ID", "targets": [{ "table": "Drone" }] }
+          ]
+        },
+        "ECardEffectType::Projectile": {
+          "name": "投掷效果",
+          "params": [
+            { "pos": 1, "name": "投掷物ID", "targets": [{ "table": "Projectile" }] }
+          ]
+        },
+        "ECardEffectType::SwapEquipment": {
+          "name": "切换卡牌(被动替换)",
+          "params": [
+            { "pos": 1, "name": "卡牌ID", "targets": [{ "table": "Card" }] },
+            { "pos": "3+", "name": "筛选条件", "targets": [{ "table": "ShopFilter" }] }
+          ]
+        },
+        "ECardEffectType::SetAttributeBound": {
+          "name": "给属性赋最大/最小值",
+          "level": "warning",
+          "params": [
+            { "pos": 2, "name": "被赋值属性ID", "targets": [{ "table": "Attribute" }] },
+            { "pos": 5, "name": "目标属性ID", "targets": [{ "table": "Attribute" }] }
+          ]
+        },
+        "ECardEffectType::ModifyAttribute": {
+          "name": "修改属性",
+          "level": "warning",
+          "params": [
+            { "pos": 1, "name": "属性Tag", "targets": [{ "table": "Attribute", "column": "AttributeName" }] }
+          ]
+        }
+      }
+    },
+    {
+      "table": "EffectNumber",
+      "type_field": "Type",
+      "params_field": "Params",
+      "types": {
+        "EEffectNumberType::BuffStackReference": {
+          "name": "引用某BUFF层数",
+          "params": [
+            { "pos": 1, "name": "引用目标ID", "targets": [{ "table": "Target" }] },
+            { "pos": 2, "name": "BUFF ID", "targets": [{ "table": "Buff" }] }
+          ]
+        },
+        "EEffectNumberType::AttributeReference": {
+          "name": "引用某属性值",
+          "level": "warning",
+          "params": [
+            { "pos": 1, "name": "引用目标ID", "targets": [{ "table": "Target" }] },
+            { "pos": 2, "name": "属性Tag", "targets": [{ "table": "Attribute", "column": "AttributeName" }] }
+          ]
+        },
+        "EEffectNumberType::TargetCountReference": {
+          "name": "引用目标数量",
+          "params": [
+            { "pos": 1, "name": "目标ID", "targets": [{ "table": "Target" }] }
+          ]
+        },
+        "EEffectNumberType::AccessoryNum": {
+          "name": "引用目标的配件数",
+          "params": [
+            { "pos": 1, "name": "目标ID", "targets": [{ "table": "Target" }] }
+          ]
+        },
+        "EEffectNumberType::EffectNumberSum": {
+          "name": "效果数字组合相加",
+          "params": [
+            { "pos": "1+", "name": "效果数字ID", "targets": [{ "table": "EffectNumber" }] }
+          ]
+        }
+      }
+    },
+    {
+      "table": "Event",
+      "type_field": "Type",
+      "params_field": "Params",
+      "types": {
+        "ERavenEventType::OnBuffReceived": {
+          "name": "获得BUFF时",
+          "params": [{ "pos": 1, "name": "BUFFID", "targets": [{ "table": "Buff" }] }]
+        },
+        "ERavenEventType::OnBuffRemoved": {
+          "name": "移除BUFF时",
+          "params": [{ "pos": 1, "name": "BUFFID", "targets": [{ "table": "Buff" }] }]
+        },
+        "ERavenEventType::OnTryAddBuff": {
+          "name": "添加BUFF时",
+          "params": [{ "pos": 1, "name": "BUFFID", "targets": [{ "table": "Buff" }] }]
+        },
+        "ERavenEventType::OnBeforeBuffReceived": {
+          "name": "获得BUFF前",
+          "params": [{ "pos": 1, "name": "BUFFID", "targets": [{ "table": "Buff" }] }]
+        }
+      }
+    },
+    {
+      "table": "ShopFilter",
+      "type_field": "ShopFilterType",
+      "params_field": "ConditionParams",
+      "types": {
+        "EShopDesignatedFilterType::FilterSpecificCard": {
+          "name": "筛选指定卡牌",
+          "params": [{ "pos": "1+", "name": "卡牌ID", "targets": [{ "table": "Card" }] }]
+        },
+        "EShopDesignatedFilterType::FilterByBuff": {
+          "name": "筛选身上BUFF",
+          "params": [
+            { "pos": 2, "name": "目标ID", "targets": [{ "table": "Target" }] },
+            { "pos": 3, "name": "BUFF ID", "targets": [{ "table": "Buff" }] }
+          ]
+        },
+        "EShopDesignatedFilterType::FilterByTags": {
+          "name": "筛选标签",
+          "params": [{ "pos": "3+", "name": "标签ID", "targets": [{ "table": "Tag" }] }]
+        }
+      }
+    },
+    {
+      "table": "TacticalEncounter",
+      "type_field": "TacticalEncounterType",
+      "params_field": "EventParams",
+      "types": {
+        "ETacticalEncounterType::TET_Shop_DesignatedType": {
+          "name": "指定类型商店",
+          "params": [{ "pos": "5+", "name": "条件ID", "targets": [{ "table": "ShopFilter" }] }]
+        },
+        "ETacticalEncounterType::TET_Event_Jungle": {
+          "name": "遭遇野怪",
+          "params": [{ "pos": "2+", "name": "怪物ID", "targets": [{ "table": "Mecha" }] }]
+        },
+        "ETacticalEncounterType::TET_Shop_Attribute": {
+          "name": "购买属性",
+          "params": [
+            { "pos": 2, "name": "属性ID", "targets": [{ "table": "Attribute" }] },
+            { "pos": 4, "name": "属性ID", "targets": [{ "table": "Attribute" }] },
+            { "pos": 6, "name": "属性ID", "targets": [{ "table": "Attribute" }] }
+          ]
+        }
+      }
+    }
+  ]
+}

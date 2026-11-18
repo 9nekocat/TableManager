@@ -1,0 +1,23 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# 虚拟环境
+.venv/
+venv/
+
+# 前端依赖与构建产物
+gui/node_modules/
+dist/
+build/
+
+# 编辑器与操作系统临时文件
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 日志与临时文件
+*.log

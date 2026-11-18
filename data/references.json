@@ -1,0 +1,192 @@
+{
+  "_comment": "跨表引用规则。column_rules: 列级 ID 引用（column_pattern 同时匹配第1行中文名和第2行英文名）；text_patterns: 描述文本中的 {Xxx,ID} 内嵌引用；effect_type_rules: Effect.xlsx 按 Type 的 Params 位置语义。targets 为候选列表，任一命中即合法；target.column 默认 RowName（A列），可指定其他列（如 Tag）。",
+  "column_rules": [
+    {
+      "name": "卡牌-效果ID",
+      "file": "Localization/Card.xlsx",
+      "column_pattern": "^(击中|非击中)效果ID\\d+$",
+      "targets": [
+        { "file": "Effect.xlsx" },
+        { "file": "Localization/RavenPilotSkillData.xlsx" }
+      ]
+    },
+    {
+      "name": "卡牌-形状",
+      "file": "Localization/Card.xlsx",
+      "column_pattern": "^ShapeId$",
+      "targets": [{ "file": "CardShape.xlsx" }]
+    },
+    {
+      "name": "卡牌-标签",
+      "file": "Localization/Card.xlsx",
+      "column_pattern": "^Tags$",
+      "targets": [{ "file": "Localization/Tag.xlsx" }]
+    },
+    {
+      "name": "Buff-效果",
+      "file": "Localization/Buff.xlsx",
+      "column_pattern": "^(EffectId|效果ID\\d+)$",
+      "targets": [{ "file": "Effect.xlsx" }]
+    },
+    {
+      "name": "事件池-事件",
+      "file": "EventTypePool.xlsx",
+      "column_pattern": "^EventID$",
+      "targets": [{ "file": "Localization/TacticalEncounterData.xlsx" }]
+    },
+    {
+      "name": "掉落组-物品筛选",
+      "file": "BattleDropGroupType.xlsx",
+      "column_pattern": "^ItemFilterConditions$",
+      "targets": [{ "file": "Localization/ShopFilterCondition.xlsx" }]
+    },
+    {
+      "name": "掉落组-属性",
+      "file": "BattleDropGroupType.xlsx",
+      "column_pattern": "^AttributeList$",
+      "targets": [{ "file": "Localization/AttributeTable.xlsx" }]
+    },
+    {
+      "name": "事件-目标",
+      "file": "Event.xlsx",
+      "column_pattern": "^SourceID$",
+      "targets": [{ "file": "Target.xlsx" }]
+    },
+    {
+      "name": "事件-触发条件",
+      "file": "Event.xlsx",
+      "column_pattern": "^TriggerConditionIDs$",
+      "targets": [{ "file": "Localization/ShopFilterCondition.xlsx" }]
+    },
+    {
+      "name": "战术事件-出现条件",
+      "file": "Localization/TacticalEncounterData.xlsx",
+      "column_pattern": "^EventAppearConditionIDs$",
+      "targets": [{ "file": "Localization/ShopFilterCondition.xlsx" }]
+    },
+    {
+      "name": "战术事件-样式",
+      "file": "Localization/TacticalEncounterData.xlsx",
+      "column_pattern": "^StyleID$",
+      "targets": [{ "file": "EventStyle.xlsx" }]
+    },
+    {
+      "name": "对话-条件",
+      "file": "Localization/DialogData2.xlsx",
+      "column_pattern": "^ConditionID$",
+      "targets": [{ "file": "DialogConditionData.xlsx" }]
+    },
+    {
+      "name": "对话-动作",
+      "file": "Localization/DialogData2.xlsx",
+      "column_pattern": "^Actions$",
+      "targets": [{ "file": "DialogActionData.xlsx" }]
+    },
+    {
+      "name": "对话-跳转",
+      "file": "Localization/DialogData2.xlsx",
+      "column_pattern": "^(NextDialogID|OptionChildrenID)$",
+      "targets": [{ "file": "Localization/DialogData2.xlsx" }]
+    },
+    {
+      "name": "地图点位-房间池",
+      "file": "StoryMapPointData.xlsx",
+      "column_pattern": "^ValidRoomData$",
+      "array_sep": "_",
+      "targets": [{ "file": "StoryMapRoomData.xlsx" }]
+    },
+    {
+      "name": "地图房间-掉落组",
+      "file": "StoryMapRoomData.xlsx",
+      "column_pattern": "^DropGroupID$",
+      "targets": [{ "file": "BattleDropGroupType.xlsx" }]
+    },
+    {
+      "name": "地图房间-类型Tag",
+      "file": "StoryMapRoomData.xlsx",
+      "column_pattern": "^RawRoomType$",
+      "targets": [{ "file": "GameplayTagTableRow.xlsx", "sheets": ["#Stage"], "column": "Tag" }]
+    },
+    {
+      "name": "交互物-对话",
+      "file": "StoryInteractableRow.xlsx",
+      "column_pattern": "^PlayDialogue$",
+      "targets": [{ "file": "Localization/DialogData2.xlsx" }]
+    },
+    {
+      "name": "Flag-Tag",
+      "file": "FlagConfigRow.xlsx",
+      "column_pattern": "^RawFlagTagString$",
+      "targets": [{ "file": "GameplayTagTableRow.xlsx", "sheets": ["#Flag"], "column": "Tag" }]
+    },
+    {
+      "name": "机甲-卡牌列表",
+      "file": "Localization/MechaTable.xlsx",
+      "column_pattern": "^CardList$",
+      "targets": [{ "file": "Localization/Card.xlsx" }]
+    },
+    {
+      "name": "机甲-掉落组",
+      "file": "Localization/MechaTable.xlsx",
+      "column_pattern": "^(Win|Loss)DropGroup$",
+      "targets": [{ "file": "BattleDropGroupType.xlsx" }]
+    },
+    {
+      "name": "无人机-卡牌",
+      "file": "Localization/Drone.xlsx",
+      "column_pattern": "^CardIds$",
+      "targets": [{ "file": "Localization/Card.xlsx" }]
+    },
+    {
+      "name": "机师技能-效果",
+      "file": "Localization/RavenPilotSkillData.xlsx",
+      "column_pattern": "^EffectIds$",
+      "targets": [{ "file": "Effect.xlsx" }]
+    },
+    {
+      "name": "猫-技能卡牌",
+      "file": "Localization/PvpCatTableTable.xlsx",
+      "column_pattern": "^SkillCardId$",
+      "targets": [{ "file": "Localization/Card.xlsx" }]
+    },
+    {
+      "name": "猫皮肤-猫",
+      "file": "Localization/CatSkinDisplayTable.xlsx",
+      "column_pattern": "^CatId$",
+      "targets": [{ "file": "Localization/PvpCatTableTable.xlsx" }]
+    },
+    {
+      "name": "投掷物-效果",
+      "file": "ProjectileTable.xlsx",
+      "column_pattern": "^EffectId$",
+      "targets": [{ "file": "Effect.xlsx" }]
+    }
+  ],
+  "text_patterns": [
+    {
+      "name": "Buff内嵌引用",
+      "regex": "\\{Buff[,，]\\s*(\\d+)\\}",
+      "targets": [{ "file": "Localization/Buff.xlsx" }]
+    },
+    {
+      "name": "Effectnumber内嵌引用",
+      "regex": "\\{Effectnumber[,，]\\s*(\\d+)\\}",
+      "targets": [{ "file": "Effectnumber.xlsx" }]
+    },
+    {
+      "name": "Card内嵌引用",
+      "regex": "\\{Card[,，]\\s*(\\d+)\\}",
+      "targets": [{ "file": "Localization/Card.xlsx" }]
+    },
+    {
+      "name": "Drone内嵌引用",
+      "regex": "\\{Drone[,，]\\s*(\\d+)\\}",
+      "targets": [{ "file": "Localization/Drone.xlsx" }]
+    },
+    {
+      "name": "Tag内嵌引用",
+      "regex": "\\{Tag[,，]\\s*(\\d+)\\}",
+      "targets": [{ "file": "Localization/Tag.xlsx" }]
+    }
+  ]
+}
