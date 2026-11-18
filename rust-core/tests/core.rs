@@ -1,8 +1,11 @@
+use calamine::{Data, Reader, open_workbook_auto};
+use rust_xlsxwriter::Workbook as XlsxWorkbook;
+use table_core::DiffReportLabels;
 use table_core::diff_workbooks;
 use table_core::formula::analyze_formula;
 use table_core::merge::{MergeStrategy, merge_workbooks};
 use table_core::model::{Cell, Header, Row, Sheet, Workbook};
-use table_core::output::write_merge_excel;
+use table_core::output::{write_diff_excel_with_labels, write_merge_excel};
 use table_core::snapshot::workbook_to_text;
 
 fn header(cn: &str, en: &str) -> Header {
@@ -90,6 +93,198 @@ fn diff_uses_text_snapshot_values() {
     ]);
     let result = diff_workbooks(&old, &new);
     assert!(!result.has_changes);
+}
+
+#[test]
+fn diff_excel_keeps_summary_and_original_cell_layout_on_one_page() {
+    let old = table(
+        "old.xlsx",
+        &[
+            ("行名", "Row", "FString"),
+            ("名称", "Name", "FString"),
+            ("数值", "Power", "int32"),
+        ],
+        &[
+            ("A", &[("Row", "A"), ("Name", "Alpha"), ("Power", "1")]),
+            ("B", &[("Row", "B"), ("Name", "Beta"), ("Power", "2")]),
+            ("C", &[("Row", "C"), ("Name", "Gamma"), ("Power", "3")]),
+        ],
+    );
+    let new = table(
+        "new.xlsx",
+        &[
+            ("行名", "Row", "FString"),
+            ("名称", "Name", "FString"),
+            ("数值", "Power", "int32"),
+        ],
+        &[
+            ("A", &[("Row", "A"), ("Name", "Alpha2"), ("Power", "1")]),
+            ("B", &[("Row", "B"), ("Name", "Beta"), ("Power", "2")]),
+            ("D", &[("Row", "D"), ("Name", "Delta"), ("Power", "4")]),
+        ],
+    );
+    let result = diff_workbooks(&old, &new);
+    let path = std::env::current_dir()
+        .unwrap()
+        .join("target")
+        .join(format!(
+            "table-core-diff-layout-{}-{}.xlsx",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+    write_diff_excel_with_labels(&result, &path, &DiffReportLabels::default()).unwrap();
+
+    let mut workbook = open_workbook_auto(&path).unwrap();
+    assert_eq!(workbook.sheet_names(), vec!["比对报告"]);
+    let range = workbook.worksheet_range("比对报告").unwrap();
+    assert!(range_contains(&range, "摘要"));
+    assert!(range_contains(&range, "旧文件"));
+    assert!(!range_contains(&range, "Alpha | Alpha2"));
+
+    let old_row = find_row(&range, "[旧版]").expect("old version row");
+    assert_eq!(cell_text(&range, old_row, 1), "A");
+    assert_eq!(cell_text(&range, old_row, 2), "Alpha");
+    assert_eq!(cell_text(&range, old_row, 3), "1");
+
+    let new_row = find_row(&range, "[当前]").expect("current version row");
+    assert_eq!(cell_text(&range, new_row, 1), "A");
+    assert_eq!(cell_text(&range, new_row, 2), "Alpha2");
+    assert_eq!(cell_text(&range, new_row, 3), "1");
+
+    let added_row = find_row(&range, "[新增]").expect("added row");
+    assert_eq!(cell_text(&range, added_row, 1), "D");
+    assert_eq!(cell_text(&range, added_row, 2), "Delta");
+    assert_eq!(cell_text(&range, added_row, 3), "4");
+
+    let deleted_row = find_row(&range, "[删除]").expect("deleted row");
+    assert_eq!(cell_text(&range, deleted_row, 1), "C");
+    assert_eq!(cell_text(&range, deleted_row, 2), "Gamma");
+    assert_eq!(cell_text(&range, deleted_row, 3), "3");
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn diff_report_labels_support_partial_localization_overrides() {
+    let labels: DiffReportLabels =
+        serde_json::from_str(r#"{"report_title":"Custom diff"}"#).unwrap();
+    assert_eq!(labels.report_title, "Custom diff");
+    assert_eq!(labels.summary, "摘要");
+    assert_eq!(labels.old_row, "旧版");
+}
+
+#[cfg(windows)]
+#[test]
+fn svn_headless_wrappers_generate_diff_and_merge_files() {
+    let directory = std::env::current_dir()
+        .unwrap()
+        .join("target")
+        .join(format!(
+            "table-core-svn-headless-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+    std::fs::create_dir_all(&directory).unwrap();
+    let base_path = directory.join("base.xlsx");
+    let mine_path = directory.join("mine.xlsx");
+    let theirs_path = directory.join("theirs.xlsx");
+    let diff_path = directory.join("diff.xlsx");
+    let merge_path = directory.join("merged.xlsx");
+    write_svn_fixture(&base_path, "Alpha");
+    write_svn_fixture(&mine_path, "Ours");
+    write_svn_fixture(&theirs_path, "Theirs");
+
+    let diff = std::process::Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            concat!(env!("CARGO_MANIFEST_DIR"), "\\svn\\svn-diff.ps1"),
+        ])
+        .arg(&base_path)
+        .arg(&mine_path)
+        .env("TABLE_CORE_EXE", env!("CARGO_BIN_EXE_table-core"))
+        .env("TM_SVN_HEADLESS", "1")
+        .env("TM_SVN_NO_OPEN", "1")
+        .env("TM_SVN_OUTPUT", &diff_path)
+        .status()
+        .unwrap();
+    assert!(diff.success());
+    assert!(diff_path.is_file());
+
+    let merge = std::process::Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            concat!(env!("CARGO_MANIFEST_DIR"), "\\svn\\svn-merge.ps1"),
+        ])
+        .arg(&merge_path)
+        .arg(&theirs_path)
+        .arg(&mine_path)
+        .arg(&base_path)
+        .env("TABLE_CORE_EXE", env!("CARGO_BIN_EXE_table-core"))
+        .env("TM_SVN_HEADLESS", "1")
+        .env("TM_SVN_NO_OPEN", "1")
+        .status()
+        .unwrap();
+    assert_eq!(merge.code(), Some(2));
+    assert!(merge_path.is_file());
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+#[cfg(windows)]
+fn write_svn_fixture(path: &std::path::Path, name: &str) {
+    let mut workbook = XlsxWorkbook::new();
+    let worksheet = workbook.add_worksheet();
+    worksheet.set_name("#Data").unwrap();
+    for (column, value) in ["行名", "名称", "数值"].into_iter().enumerate() {
+        worksheet.write_string(0, column as u16, value).unwrap();
+    }
+    for (column, value) in ["Row", "Name", "Power"].into_iter().enumerate() {
+        worksheet.write_string(1, column as u16, value).unwrap();
+    }
+    for (column, value) in ["FString", "FString", "int32"].into_iter().enumerate() {
+        worksheet.write_string(2, column as u16, value).unwrap();
+    }
+    for (column, value) in ["A", name, "1"].into_iter().enumerate() {
+        worksheet.write_string(3, column as u16, value).unwrap();
+    }
+    workbook.save(path).unwrap();
+}
+
+fn range_contains(range: &calamine::Range<Data>, expected: &str) -> bool {
+    range
+        .cells()
+        .any(|(_, _, value)| cell_value(value) == expected)
+}
+
+fn find_row(range: &calamine::Range<Data>, first_cell: &str) -> Option<u32> {
+    (0..range.height() as u32).find(|row| cell_text(range, *row, 0) == first_cell)
+}
+
+fn cell_text(range: &calamine::Range<Data>, row: u32, column: u32) -> String {
+    range
+        .get_value((row, column))
+        .map(cell_value)
+        .unwrap_or_default()
+}
+
+fn cell_value(value: &Data) -> String {
+    match value {
+        Data::Empty => String::new(),
+        Data::String(value) => value.clone(),
+        Data::Float(value) if value.fract() == 0.0 => format!("{}", *value as i64),
+        other => other.to_string(),
+    }
 }
 
 #[test]

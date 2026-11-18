@@ -1,5 +1,14 @@
 $ErrorActionPreference = "Stop"
-$SvnArgs = @($args)
+$Headless = $env:TM_SVN_HEADLESS -eq "1"
+$SvnArgs = @()
+foreach ($argument in @($args)) {
+    if ($argument -in @("--headless", "-Headless")) {
+        $Headless = $true
+    }
+    else {
+        $SvnArgs += $argument
+    }
+}
 
 function Get-TableCorePath {
     if ($env:TABLE_CORE_EXE -and (Test-Path -LiteralPath $env:TABLE_CORE_EXE -PathType Leaf)) {
@@ -35,11 +44,11 @@ function Test-ExcelWorkbook {
     try {
         $stream = [IO.File]::OpenRead($Path)
         try {
-            if ($stream.Length -lt 4) {
+            if ($stream.Length -lt 8) {
                 return $false
             }
-            $signature = New-Object byte[] 4
-            [void] $stream.Read($signature, 0, 4)
+            $signature = New-Object byte[] 8
+            [void] $stream.Read($signature, 0, 8)
             if ($signature[0] -eq 0x50 -and $signature[1] -eq 0x4B) {
                 Add-Type -AssemblyName System.IO.Compression.FileSystem
                 $archive = [IO.Compression.ZipFile]::OpenRead($Path)
@@ -51,6 +60,14 @@ function Test-ExcelWorkbook {
                 finally {
                     $archive.Dispose()
                 }
+            }
+            if (
+                $signature[0] -eq 0xD0 -and $signature[1] -eq 0xCF -and
+                $signature[2] -eq 0x11 -and $signature[3] -eq 0xE0 -and
+                $signature[4] -eq 0xA1 -and $signature[5] -eq 0xB1 -and
+                $signature[6] -eq 0x1A -and $signature[7] -eq 0xE1
+            ) {
+                return $true
             }
             return $false
         }
@@ -89,7 +106,7 @@ function Get-OutputPath {
 function Open-ReviewFile {
     param([string] $Path)
 
-    if ($env:TM_SVN_NO_OPEN -ne "1") {
+    if (!$Headless -and $env:TM_SVN_NO_OPEN -ne "1") {
         Start-Process -FilePath $Path | Out-Null
     }
 }
@@ -113,6 +130,12 @@ if ($SvnArgs.Count -lt 2) {
 $oldPath = [IO.Path]::GetFullPath($SvnArgs[-2])
 $newPath = [IO.Path]::GetFullPath($SvnArgs[-1])
 if (!(Test-ExcelWorkbook $oldPath) -or !(Test-ExcelWorkbook $newPath)) {
+    if ($Headless) {
+        [Console]::Error.WriteLine(
+            "Headless mode only handles Excel workbook families: .xlsx, .xlsm, .xlsb and .xls."
+        )
+        exit 2
+    }
     Invoke-XlCompareDiff $oldPath $newPath
 }
 

@@ -4,9 +4,11 @@ use clap::{Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 use serde_json::{Value, json};
 use table_core::error::Result;
+use table_core::localization::DiffReportLabels;
 use table_core::merge::{MergeStrategy, format_merge_text, merge_files};
 use table_core::model::read_workbook;
-use table_core::output::{write_diff_excel, write_merge_excel};
+use table_core::output::{write_diff_excel_with_labels, write_merge_excel};
+use table_core::svn_integration::install_svn_integration;
 use table_core::{diff_files, format_text_diff};
 
 #[derive(Parser)]
@@ -39,6 +41,9 @@ enum Command {
         format: OutputFormat,
         #[arg(long)]
         output: Option<PathBuf>,
+        /// Optional JSON file overriding localized Excel report labels.
+        #[arg(long)]
+        labels: Option<PathBuf>,
     },
     Merge {
         base: PathBuf,
@@ -52,6 +57,14 @@ enum Command {
         report: ReportFormat,
         #[arg(long)]
         allow_conflicts: bool,
+    },
+    /// Register this package as the Subversion diff and merge helper.
+    InstallSvn {
+        /// Override the Subversion user config file.
+        #[arg(long)]
+        config: Option<PathBuf>,
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -176,6 +189,7 @@ fn run(cli: Cli) -> Result<i32> {
             new,
             format,
             output,
+            labels,
         } => {
             let result = diff_files(&old, &new)?;
             match format {
@@ -183,7 +197,12 @@ fn run(cli: Cli) -> Result<i32> {
                 OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&result)?),
                 OutputFormat::Excel => {
                     let output = output.unwrap_or_else(|| default_diff_path(&new));
-                    write_diff_excel(&result, &output)?;
+                    let labels = labels
+                        .as_deref()
+                        .map(DiffReportLabels::from_json_path)
+                        .transpose()?
+                        .unwrap_or_default();
+                    write_diff_excel_with_labels(&result, &output, &labels)?;
                     println!("{}", output.display());
                 }
             }
@@ -229,6 +248,23 @@ fn run(cli: Cli) -> Result<i32> {
             write_merge_excel(&result, &output, true)?;
             println!("{}", output.display());
             Ok(if result.ok() { 0 } else { 2 })
+        }
+        Command::InstallSvn { config, dry_run } => {
+            let executable = std::env::current_exe()?;
+            let result = install_svn_integration(executable, config.as_deref(), dry_run)?;
+            if result.dry_run {
+                println!("SVN 配置路径: {}", result.config_path);
+                println!("diff-cmd: {}", result.diff_cmd);
+                println!("merge-tool-cmd: {}", result.merge_tool_cmd);
+                println!("仅预览，未写入配置。");
+            } else if result.changed {
+                println!("已注册 TableManager SVN 集成: {}", result.config_path);
+                println!("diff-cmd: {}", result.diff_cmd);
+                println!("merge-tool-cmd: {}", result.merge_tool_cmd);
+            } else {
+                println!("SVN 集成已指向当前 TableManager: {}", result.config_path);
+            }
+            Ok(0)
         }
     }
 }

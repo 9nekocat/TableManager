@@ -36,10 +36,20 @@ pub struct ColumnChange {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct ColumnAlignment {
+    pub kind: String,
+    pub old_index: Option<usize>,
+    pub new_index: Option<usize>,
+    pub old_header: Option<Header>,
+    pub new_header: Option<Header>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct SheetDiff {
     pub sheet: String,
     pub status: String,
     pub columns: Vec<Header>,
+    pub column_alignments: Vec<ColumnAlignment>,
     pub column_changes: Vec<ColumnChange>,
     pub row_changes: Vec<RowChange>,
 }
@@ -115,6 +125,18 @@ pub fn diff_workbooks(old: &Workbook, new: &Workbook) -> DiffResult {
                 sheet: sheet_name,
                 status: "added".to_string(),
                 columns: new_sheet.headers(),
+                column_alignments: new_sheet
+                    .columns
+                    .iter()
+                    .enumerate()
+                    .map(|(index, column)| ColumnAlignment {
+                        kind: "added".to_string(),
+                        old_index: None,
+                        new_index: Some(index),
+                        old_header: None,
+                        new_header: Some(column.header.clone()),
+                    })
+                    .collect(),
                 column_changes: vec![],
                 row_changes: new_sheet
                     .rows
@@ -133,6 +155,18 @@ pub fn diff_workbooks(old: &Workbook, new: &Workbook) -> DiffResult {
                 sheet: sheet_name,
                 status: "deleted".to_string(),
                 columns: old_sheet.headers(),
+                column_alignments: old_sheet
+                    .columns
+                    .iter()
+                    .enumerate()
+                    .map(|(index, column)| ColumnAlignment {
+                        kind: "deleted".to_string(),
+                        old_index: Some(index),
+                        new_index: None,
+                        old_header: Some(column.header.clone()),
+                        new_header: None,
+                    })
+                    .collect(),
                 column_changes: vec![],
                 row_changes: old_sheet
                     .rows
@@ -197,6 +231,16 @@ fn summarize(sheets: &[SheetDiff]) -> DiffSummary {
 
 fn diff_sheet(old: &TextSheet, new: &TextSheet) -> SheetDiff {
     let (aligned, column_changes) = align_columns(old, new);
+    let column_alignments = aligned
+        .iter()
+        .map(|column| ColumnAlignment {
+            kind: column.kind.clone(),
+            old_index: column.old_index,
+            new_index: column.new_index,
+            old_header: column.old_header.clone(),
+            new_header: column.new_header.clone(),
+        })
+        .collect();
     let row_changes = diff_rows(old, new, &aligned);
     SheetDiff {
         sheet: new.name.clone(),
@@ -206,6 +250,7 @@ fn diff_sheet(old: &TextSheet, new: &TextSheet) -> SheetDiff {
             "modified".to_string()
         },
         columns: new.headers(),
+        column_alignments,
         column_changes,
         row_changes,
     }

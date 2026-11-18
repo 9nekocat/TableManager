@@ -2,192 +2,587 @@ use std::path::Path;
 
 use rust_xlsxwriter::{Color, Format, Workbook as XlsxWorkbook};
 
-use crate::diff::DiffResult;
+use crate::diff::{DiffResult, RowChange, SheetDiff};
 use crate::error::Result;
+use crate::localization::DiffReportLabels;
 use crate::merge::MergeResult;
 use crate::model::DATA_START_ROW;
 
 pub fn write_diff_excel(result: &DiffResult, output_path: impl AsRef<Path>) -> Result<()> {
+    write_diff_excel_with_labels(result, output_path, &DiffReportLabels::default())
+}
+
+pub fn write_diff_excel_with_labels(
+    result: &DiffResult,
+    output_path: impl AsRef<Path>,
+    labels: &DiffReportLabels,
+) -> Result<()> {
     let mut workbook = XlsxWorkbook::new();
     let header_format = Format::new()
         .set_bold()
         .set_font_color(Color::White)
         .set_background_color("#4472C4");
-    let added_format = Format::new().set_background_color("#E2F0D9");
-    let deleted_format = Format::new().set_background_color("#FCE4D6");
-    let modified_format = Format::new().set_background_color("#FFF2CC");
-    let summary = workbook.add_worksheet();
-    summary.set_name("Summary")?;
-    for (row, (label, value)) in [
-        ("Old", result.old.clone()),
-        ("New", result.new.clone()),
-        ("Comparison", result.comparison.clone()),
-        ("Has changes", result.has_changes.to_string()),
-        ("Rows added", result.summary.rows_added.to_string()),
-        ("Rows deleted", result.summary.rows_deleted.to_string()),
-        ("Rows modified", result.summary.rows_modified.to_string()),
-        ("Columns added", result.summary.columns_added.to_string()),
-        (
-            "Columns deleted",
-            result.summary.columns_deleted.to_string(),
-        ),
-        (
-            "Columns modified",
-            result.summary.columns_modified.to_string(),
-        ),
-        ("Columns moved", result.summary.columns_moved.to_string()),
-        ("Cells modified", result.summary.cells_modified.to_string()),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        summary.write_string_with_format(row as u32, 0, label, &header_format)?;
-        summary.write_string(row as u32, 1, value)?;
-    }
-    summary.set_column_width(0, 24)?;
-    summary.set_column_width(1, 72)?;
+    let title_format = Format::new()
+        .set_bold()
+        .set_font_size(16)
+        .set_font_color("#1F3864");
+    let section_format = Format::new()
+        .set_bold()
+        .set_font_color(Color::White)
+        .set_background_color("#5B9BD5");
+    let summary_label_format = Format::new()
+        .set_bold()
+        .set_background_color("#D9EAF7")
+        .set_text_wrap();
+    let body_format = Format::new()
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let added_format = Format::new()
+        .set_background_color("#E2F0D9")
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let deleted_format = Format::new()
+        .set_background_color("#FCE4D6")
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let old_format = Format::new()
+        .set_background_color("#FFF2CC")
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let new_format = Format::new()
+        .set_background_color("#DDEBF7")
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let old_changed_format = Format::new()
+        .set_background_color("#FFF2CC")
+        .set_font_color("#C00000")
+        .set_bold()
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let new_changed_format = Format::new()
+        .set_background_color("#DDEBF7")
+        .set_font_color("#006100")
+        .set_bold()
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let column_format = Format::new()
+        .set_background_color("#EADCF8")
+        .set_font_color("#5A2D82")
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let issue_error_format = Format::new()
+        .set_background_color("#FFC7CE")
+        .set_text_wrap();
 
-    let changes = workbook.add_worksheet();
-    changes.set_name("Changes")?;
-    for (column, name) in ["Action", "Sheet", "Row", "Column", "Old", "New", "Note"]
-        .into_iter()
-        .enumerate()
-    {
-        changes.write_string_with_format(0, column as u16, name, &header_format)?;
-    }
-    let mut output_row = 1u32;
-    for sheet in &result.sheets {
-        for change in &sheet.column_changes {
-            let action = match change.kind.as_str() {
-                "added" => "COLUMN_ADDED",
-                "deleted" => "COLUMN_DELETED",
-                "modified" => "COLUMN_MODIFIED",
-                "moved" => "COLUMN_MOVED",
-                _ => "COLUMN_CHANGE",
-            };
-            let old = change
-                .old
-                .as_ref()
-                .map(|header| header.display_name())
-                .unwrap_or_default();
-            let new = change
-                .new
-                .as_ref()
-                .map(|header| header.display_name())
-                .unwrap_or_default();
-            write_row(
-                changes,
+    let report = workbook.add_worksheet();
+    report.set_name(safe_report_sheet_name(&labels.report_title))?;
+    let mut output_row = write_diff_summary(
+        report,
+        0,
+        result,
+        labels,
+        &title_format,
+        &header_format,
+        &summary_label_format,
+        &body_format,
+    )?;
+
+    let changed_sheets = result
+        .sheets
+        .iter()
+        .filter(|sheet| sheet.has_changes())
+        .collect::<Vec<_>>();
+    if changed_sheets.is_empty() {
+        report.write_string_with_format(output_row, 0, &labels.no_differences, &section_format)?;
+    } else {
+        for sheet in changed_sheets {
+            output_row = write_sheet_section(
+                report,
                 output_row,
-                &[action, &sheet.sheet, "", &change.column, &old, &new, ""],
-                format_for_kind(
-                    &change.kind,
-                    &added_format,
-                    &deleted_format,
-                    &modified_format,
-                ),
+                sheet,
+                labels,
+                &header_format,
+                &section_format,
+                &body_format,
+                &added_format,
+                &deleted_format,
+                &old_format,
+                &new_format,
+                &old_changed_format,
+                &new_changed_format,
+                &column_format,
             )?;
-            output_row += 1;
-        }
-        for change in &sheet.row_changes {
-            match change.kind.as_str() {
-                "added" => {
-                    let values = change.new_values.join(" | ");
-                    write_row(
-                        changes,
-                        output_row,
-                        &["ROW_ADDED", &sheet.sheet, &change.row, "", "", &values, ""],
-                        &added_format,
-                    )?;
-                    output_row += 1;
-                }
-                "deleted" => {
-                    let values = change.old_values.join(" | ");
-                    write_row(
-                        changes,
-                        output_row,
-                        &[
-                            "ROW_DELETED",
-                            &sheet.sheet,
-                            &change.row,
-                            "",
-                            &values,
-                            "",
-                            "",
-                        ],
-                        &deleted_format,
-                    )?;
-                    output_row += 1;
-                }
-                "modified" => {
-                    for cell in &change.cells {
-                        write_row(
-                            changes,
-                            output_row,
-                            &[
-                                "CELL_MODIFIED",
-                                &sheet.sheet,
-                                &change.row,
-                                &cell.column,
-                                &cell.old,
-                                &cell.new,
-                                "",
-                            ],
-                            &modified_format,
-                        )?;
-                        output_row += 1;
-                    }
-                }
-                _ => {}
-            }
         }
     }
-    changes.set_column_width(0, 18)?;
-    changes.set_column_width(1, 18)?;
-    changes.set_column_width(2, 18)?;
-    changes.set_column_width(3, 24)?;
-    changes.set_column_width(4, 42)?;
-    changes.set_column_width(5, 42)?;
-    changes.autofilter(0, 0, output_row.saturating_sub(1), 6)?;
 
-    let issues = workbook.add_worksheet();
-    issues.set_name("Issues")?;
-    for (column, name) in [
-        "Severity",
-        "Code",
-        "Sheet",
-        "Row",
-        "Column",
-        "Message",
-        "Reference",
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        issues.write_string_with_format(0, column as u16, name, &header_format)?;
-    }
-    for (index, issue) in result.issues.iter().enumerate() {
-        let row = index as u32 + 1;
-        issues.write_string(row, 0, &issue.severity)?;
-        issues.write_string(row, 1, &issue.code)?;
-        issues.write_string(row, 2, issue.sheet.as_deref().unwrap_or(""))?;
-        issues.write_string(
-            row,
-            3,
-            issue.row.map(|value| value.to_string()).unwrap_or_default(),
+    if !result.issues.is_empty() {
+        output_row += 1;
+        write_issue_section(
+            report,
+            output_row,
+            result,
+            labels,
+            &header_format,
+            &section_format,
+            &body_format,
+            &issue_error_format,
         )?;
-        issues.write_string(row, 4, issue.column.as_deref().unwrap_or(""))?;
-        issues.write_string(row, 5, &issue.message)?;
-        issues.write_string(row, 6, issue.reference.as_deref().unwrap_or(""))?;
     }
-    issues.set_column_width(0, 12)?;
-    issues.set_column_width(1, 28)?;
-    issues.set_column_width(2, 18)?;
-    issues.set_column_width(3, 10)?;
-    issues.set_column_width(4, 24)?;
-    issues.set_column_width(5, 70)?;
-    issues.set_column_width(6, 40)?;
+
+    report.set_column_width(0, 20)?;
+    let max_columns = result
+        .sheets
+        .iter()
+        .map(|sheet| sheet.column_alignments.len())
+        .max()
+        .unwrap_or(0);
+    for column in 1..=max_columns {
+        report.set_column_width(column as u16, 24)?;
+    }
     workbook.save(output_path)?;
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_diff_summary(
+    worksheet: &mut rust_xlsxwriter::Worksheet,
+    mut row: u32,
+    result: &DiffResult,
+    labels: &DiffReportLabels,
+    title_format: &Format,
+    header_format: &Format,
+    label_format: &Format,
+    body_format: &Format,
+) -> Result<u32> {
+    worksheet.write_string_with_format(row, 0, &labels.report_title, title_format)?;
+    row += 2;
+    worksheet.write_string_with_format(row, 0, &labels.summary, header_format)?;
+    row += 1;
+    let has_changes = if result.has_changes {
+        labels.yes.as_str()
+    } else {
+        labels.no.as_str()
+    };
+    let entries = [
+        (labels.old_file.as_str(), result.old.as_str()),
+        (labels.new_file.as_str(), result.new.as_str()),
+        (
+            labels.comparison.as_str(),
+            if result.comparison == "text_snapshot_with_cached_formula_values" {
+                labels.comparison_cached_values.as_str()
+            } else {
+                result.comparison.as_str()
+            },
+        ),
+        (labels.has_changes.as_str(), has_changes),
+        (labels.rows_added.as_str(), ""),
+        (labels.rows_deleted.as_str(), ""),
+        (labels.rows_modified.as_str(), ""),
+        (labels.columns_added.as_str(), ""),
+        (labels.columns_deleted.as_str(), ""),
+        (labels.columns_modified.as_str(), ""),
+        (labels.columns_moved.as_str(), ""),
+        (labels.cells_modified.as_str(), ""),
+    ];
+    let counts = [
+        result.summary.rows_added.to_string(),
+        result.summary.rows_deleted.to_string(),
+        result.summary.rows_modified.to_string(),
+        result.summary.columns_added.to_string(),
+        result.summary.columns_deleted.to_string(),
+        result.summary.columns_modified.to_string(),
+        result.summary.columns_moved.to_string(),
+        result.summary.cells_modified.to_string(),
+    ];
+    for (index, (label, value)) in entries.into_iter().enumerate() {
+        worksheet.write_string_with_format(row, 0, label, label_format)?;
+        let value = if index >= 4 {
+            counts[index - 4].as_str()
+        } else {
+            value
+        };
+        write_blank_or_string(worksheet, row, 1, value, body_format)?;
+        row += 1;
+    }
+    Ok(row + 1)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_sheet_section(
+    worksheet: &mut rust_xlsxwriter::Worksheet,
+    mut row: u32,
+    sheet: &SheetDiff,
+    labels: &DiffReportLabels,
+    header_format: &Format,
+    section_format: &Format,
+    body_format: &Format,
+    added_format: &Format,
+    deleted_format: &Format,
+    old_format: &Format,
+    new_format: &Format,
+    old_changed_format: &Format,
+    new_changed_format: &Format,
+    column_format: &Format,
+) -> Result<u32> {
+    worksheet.write_string_with_format(
+        row,
+        0,
+        format!("{}：{}", labels.worksheet, sheet.sheet),
+        section_format,
+    )?;
+    row += 2;
+
+    let columns = &sheet.column_alignments;
+    worksheet.write_string_with_format(row, 0, &labels.chinese_header, header_format)?;
+    for (index, column) in columns.iter().enumerate() {
+        let header = column
+            .new_header
+            .as_ref()
+            .or(column.old_header.as_ref())
+            .cloned()
+            .unwrap_or_default();
+        write_blank_or_string(worksheet, row, index as u16 + 1, &header.cn, header_format)?;
+    }
+    row += 1;
+    worksheet.write_string_with_format(row, 0, &labels.english_header, header_format)?;
+    for (index, column) in columns.iter().enumerate() {
+        let header = column
+            .new_header
+            .as_ref()
+            .or(column.old_header.as_ref())
+            .cloned()
+            .unwrap_or_default();
+        write_blank_or_string(worksheet, row, index as u16 + 1, &header.en, header_format)?;
+    }
+    row += 1;
+    worksheet.write_string_with_format(row, 0, &labels.field_type, header_format)?;
+    for (index, column) in columns.iter().enumerate() {
+        let header = column
+            .new_header
+            .as_ref()
+            .or(column.old_header.as_ref())
+            .cloned()
+            .unwrap_or_default();
+        write_blank_or_string(
+            worksheet,
+            row,
+            index as u16 + 1,
+            &header.type_name,
+            header_format,
+        )?;
+    }
+    row += 2;
+
+    for change in &sheet.column_changes {
+        row = write_column_change(worksheet, row, sheet, change, labels, column_format)?;
+    }
+    if !sheet.column_changes.is_empty() && !sheet.row_changes.is_empty() {
+        row += 1;
+    }
+
+    for change in &sheet.row_changes {
+        row = write_row_change(
+            worksheet,
+            row,
+            sheet,
+            change,
+            labels,
+            body_format,
+            added_format,
+            deleted_format,
+            old_format,
+            new_format,
+            old_changed_format,
+            new_changed_format,
+        )?;
+        row += 1;
+    }
+    Ok(row + 1)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_row_change(
+    worksheet: &mut rust_xlsxwriter::Worksheet,
+    row: u32,
+    sheet: &SheetDiff,
+    change: &RowChange,
+    labels: &DiffReportLabels,
+    body_format: &Format,
+    added_format: &Format,
+    deleted_format: &Format,
+    old_format: &Format,
+    new_format: &Format,
+    old_changed_format: &Format,
+    new_changed_format: &Format,
+) -> Result<u32> {
+    let old_values = aligned_values(sheet, &change.old_values, true);
+    let new_values = aligned_values(sheet, &change.new_values, false);
+    match change.kind.as_str() {
+        "added" => {
+            write_labeled_values(
+                worksheet,
+                row,
+                &format!("[{}]", labels.added_row),
+                &new_values,
+                added_format,
+                None,
+                None,
+            )?;
+            Ok(row + 1)
+        }
+        "deleted" => {
+            write_labeled_values(
+                worksheet,
+                row,
+                &format!("[{}]", labels.deleted_row),
+                &old_values,
+                deleted_format,
+                None,
+                None,
+            )?;
+            Ok(row + 1)
+        }
+        "modified" => {
+            let changed = old_values
+                .iter()
+                .zip(new_values.iter())
+                .map(|(old, new)| old != new)
+                .collect::<Vec<_>>();
+            write_labeled_values(
+                worksheet,
+                row,
+                &format!("[{}]", labels.old_row),
+                &old_values,
+                old_format,
+                Some(&changed),
+                Some(old_changed_format),
+            )?;
+            write_labeled_values(
+                worksheet,
+                row + 1,
+                &format!("[{}]", labels.new_row),
+                &new_values,
+                new_format,
+                Some(&changed),
+                Some(new_changed_format),
+            )?;
+            Ok(row + 2)
+        }
+        _ => {
+            write_labeled_values(
+                worksheet,
+                row,
+                &change.kind,
+                &new_values,
+                body_format,
+                None,
+                None,
+            )?;
+            Ok(row + 1)
+        }
+    }
+}
+
+fn write_column_change(
+    worksheet: &mut rust_xlsxwriter::Worksheet,
+    row: u32,
+    sheet: &SheetDiff,
+    change: &crate::diff::ColumnChange,
+    labels: &DiffReportLabels,
+    format: &Format,
+) -> Result<u32> {
+    let old = change
+        .old
+        .as_ref()
+        .map(|header| header.display_name())
+        .unwrap_or_default();
+    let new = change
+        .new
+        .as_ref()
+        .map(|header| header.display_name())
+        .unwrap_or_default();
+    let (label, message) = match change.kind.as_str() {
+        "added" => (
+            labels.added_column.as_str(),
+            format!("{}：{}", labels.added_column, new),
+        ),
+        "deleted" => (
+            labels.deleted_column.as_str(),
+            format!("{}：{}", labels.deleted_column, old),
+        ),
+        "moved" => (
+            labels.moved_column.as_str(),
+            format!("{}：{}", labels.moved_column, new),
+        ),
+        _ => (
+            labels.modified_column.as_str(),
+            format!("{}：{} → {}", labels.modified_column, old, new),
+        ),
+    };
+    let target = sheet
+        .column_alignments
+        .iter()
+        .position(|column| {
+            (change.new_index.is_some() && column.new_index == change.new_index)
+                || (change.old_index.is_some() && column.old_index == change.old_index)
+        })
+        .unwrap_or(0);
+    write_blank_or_string(worksheet, row, 0, &format!("[{label}]"), format)?;
+    for column in 0..sheet.column_alignments.len() {
+        write_blank_or_string(worksheet, row, column as u16 + 1, "", format)?;
+    }
+    write_blank_or_string(worksheet, row, target as u16 + 1, &message, format)?;
+    Ok(row + 1)
+}
+
+fn write_labeled_values(
+    worksheet: &mut rust_xlsxwriter::Worksheet,
+    row: u32,
+    label: &str,
+    values: &[String],
+    format: &Format,
+    changed: Option<&[bool]>,
+    changed_format: Option<&Format>,
+) -> Result<()> {
+    write_blank_or_string(worksheet, row, 0, label, format)?;
+    for (index, value) in values.iter().enumerate() {
+        let cell_format = changed
+            .and_then(|flags| flags.get(index).copied())
+            .filter(|changed| *changed)
+            .and(changed_format)
+            .unwrap_or(format);
+        write_blank_or_string(worksheet, row, index as u16 + 1, value, cell_format)?;
+    }
+    let height = estimated_row_height(values);
+    if height > 18.0 {
+        worksheet.set_row_height(row, height)?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_issue_section(
+    worksheet: &mut rust_xlsxwriter::Worksheet,
+    row: u32,
+    result: &DiffResult,
+    labels: &DiffReportLabels,
+    header_format: &Format,
+    section_format: &Format,
+    body_format: &Format,
+    error_format: &Format,
+) -> Result<()> {
+    worksheet.write_string_with_format(row, 0, &labels.issues, section_format)?;
+    let mut output_row = row + 1;
+    for (column, label) in [
+        &labels.severity,
+        &labels.code,
+        &labels.sheet,
+        &labels.row,
+        &labels.column,
+        &labels.message,
+        &labels.reference,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        worksheet.write_string_with_format(output_row, column as u16, label, header_format)?;
+    }
+    output_row += 1;
+    for issue in &result.issues {
+        let format = if issue.severity == "error" {
+            error_format
+        } else {
+            body_format
+        };
+        let severity = match issue.severity.as_str() {
+            "error" => &labels.error,
+            "warning" => &labels.warning,
+            _ => &labels.info,
+        };
+        let row_text = issue.row.map(|value| value.to_string()).unwrap_or_default();
+        let values = [
+            severity.as_str(),
+            issue.code.as_str(),
+            issue.sheet.as_deref().unwrap_or(""),
+            row_text.as_str(),
+            issue.column.as_deref().unwrap_or(""),
+            issue.message.as_str(),
+            issue.reference.as_deref().unwrap_or(""),
+        ];
+        for (column, value) in values.into_iter().enumerate() {
+            write_blank_or_string(worksheet, output_row, column as u16, value, format)?;
+        }
+        output_row += 1;
+    }
+    Ok(())
+}
+
+fn aligned_values(sheet: &SheetDiff, values: &[String], old_side: bool) -> Vec<String> {
+    sheet
+        .column_alignments
+        .iter()
+        .map(|column| {
+            let index = if old_side {
+                column.old_index
+            } else {
+                column.new_index
+            };
+            index
+                .and_then(|index| values.get(index))
+                .cloned()
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+fn estimated_row_height(values: &[String]) -> f64 {
+    let lines = values
+        .iter()
+        .map(|value| {
+            value
+                .lines()
+                .map(|line| (line.chars().count() as f64 / 22.0).ceil() as usize)
+                .sum::<usize>()
+                .max(1)
+        })
+        .max()
+        .unwrap_or(1);
+    18.0_f64.max((lines as f64 * 15.0).min(90.0))
+}
+
+fn write_blank_or_string(
+    worksheet: &mut rust_xlsxwriter::Worksheet,
+    row: u32,
+    column: u16,
+    value: &str,
+    format: &Format,
+) -> Result<()> {
+    if value.is_empty() {
+        worksheet.write_blank(row, column, format)?;
+    } else {
+        worksheet.write_string_with_format(row, column, value, format)?;
+    }
+    Ok(())
+}
+
+fn safe_report_sheet_name(name: &str) -> String {
+    let mut sanitized = name
+        .chars()
+        .map(|character| {
+            if matches!(character, '[' | ']' | ':' | '*' | '?' | '/' | '\\') {
+                '_'
+            } else {
+                character
+            }
+        })
+        .take(31)
+        .collect::<String>();
+    sanitized = sanitized.trim_matches('\'').trim().to_string();
+    if sanitized.is_empty() {
+        "比对报告".to_string()
+    } else {
+        sanitized
+    }
 }
 
 fn write_row(
@@ -200,19 +595,6 @@ fn write_row(
         worksheet.write_string_with_format(row, column as u16, *value, format)?;
     }
     Ok(())
-}
-
-fn format_for_kind<'a>(
-    kind: &str,
-    added: &'a Format,
-    deleted: &'a Format,
-    modified: &'a Format,
-) -> &'a Format {
-    match kind {
-        "added" => added,
-        "deleted" => deleted,
-        _ => modified,
-    }
 }
 
 pub fn write_merge_excel(

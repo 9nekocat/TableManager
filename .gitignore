@@ -2,6 +2,15 @@
 rust-core/target/
 rust-core/dist/
 
+# Release export managed by SVN
+/config/
+/svn/
+/table-core.exe
+/configure-svn.bat
+/README.md
+/*.zip
+/*.sha256
+
 # Python leftovers
 __pycache__/
 .pytest_cache/
@@ -17,3 +26,10 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Temporary files
+*.tmp
+*.bak
+.temp/
+target/
+dist/
