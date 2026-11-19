@@ -7,7 +7,9 @@ use table_core::merge::{
 };
 use table_core::merge_review::apply_merge_review;
 use table_core::model::{Cell, Header, Row, Sheet, Workbook};
-use table_core::output::{write_diff_excel_with_layout, write_merge_excel, write_merge_review};
+use table_core::output::{
+    write_diff_excel_with_layout, write_merge_excel, write_merge_review, write_merged_workbook,
+};
 use table_core::snapshot::workbook_to_text;
 use table_core::{DiffExcelLayout, DiffReportLabels, Issue};
 
@@ -1178,6 +1180,52 @@ fn merge_review_applies_delete_conflict_default() {
         let resolved = table_core::model::read_workbook(&output).unwrap();
         assert_eq!(resolved.sheet("#Data").unwrap().rows.len(), expected_rows);
     }
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+#[test]
+fn merged_workbook_and_review_export_share_data_sheet_values() {
+    let base = table(
+        "base",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[("A", &[("Row", "A"), ("Name", "Base")])],
+    );
+    let ours = table(
+        "ours",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[("A", &[("Row", "A"), ("Name", "Local")])],
+    );
+    let theirs = table(
+        "theirs",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[("A", &[("Row", "A"), ("Name", "Local")])],
+    );
+    let result = merge_workbooks(&base, &ours, &theirs, MergeStrategy::Fail);
+    let directory = std::env::current_dir()
+        .unwrap()
+        .join("target")
+        .join(format!(
+            "table-core-merge-writers-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+    std::fs::create_dir_all(&directory).unwrap();
+    let clean_path = directory.join("clean.xlsx");
+    let report_path = directory.join("report.xlsx");
+    write_merged_workbook(&result, &clean_path).unwrap();
+    write_merge_excel(&result, &report_path, true).unwrap();
+
+    let mut clean = open_workbook_auto(&clean_path).unwrap();
+    let mut report = open_workbook_auto(&report_path).unwrap();
+    assert_eq!(clean.sheet_names(), vec!["#Data"]);
+    assert!(report.sheet_names().contains(&"_MergeReview".to_string()));
+    let clean_data = clean.worksheet_range("#Data").unwrap();
+    let report_data = report.worksheet_range("#Data").unwrap();
+    assert_eq!(cell_text(&clean_data, 3, 1), cell_text(&report_data, 3, 1));
+    assert_eq!(cell_text(&clean_data, 3, 2), cell_text(&report_data, 3, 2));
     let _ = std::fs::remove_dir_all(directory);
 }
 
