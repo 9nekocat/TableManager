@@ -196,12 +196,19 @@ fn apply_review_row(
         if let Some(index) = row_index {
             sheet.rows[index].cells = cells;
         } else {
-            sheet.rows.push(Row {
-                key: meta.row.clone(),
-                occurrence: meta.occurrence,
-                cells,
-                source_row: Some(DATA_START_ROW + sheet.rows.len()),
-            });
+            let index = preview_row.order_index.min(sheet.rows.len());
+            sheet.rows.insert(
+                index,
+                Row {
+                    key: meta.row.clone(),
+                    occurrence: meta.occurrence,
+                    cells,
+                    source_row: Some(DATA_START_ROW + index),
+                },
+            );
+            for (offset, row) in sheet.rows.iter_mut().enumerate().skip(index) {
+                row.source_row = Some(DATA_START_ROW + offset);
+            }
         }
         return Ok(());
     }
@@ -361,5 +368,86 @@ fn preview_display(cell: &Cell) -> String {
         (Some(formula), false) => format!("={formula} -> {}", cell.value),
         (Some(formula), true) => format!("={formula}"),
         (None, _) => cell.value.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{Header, Sheet, Workbook};
+
+    fn row(key: &str, source_row: usize) -> Row {
+        Row {
+            key: key.to_string(),
+            occurrence: 1,
+            cells: vec![
+                Cell {
+                    value: key.to_string(),
+                    formula: None,
+                },
+                Cell {
+                    value: format!("{key} value"),
+                    formula: None,
+                },
+            ],
+            source_row: Some(source_row),
+        }
+    }
+
+    #[test]
+    fn reinserts_row_at_original_position() {
+        let mut workbook = Workbook {
+            path: "output".to_string(),
+            sheets: vec![Sheet {
+                name: "#Data".to_string(),
+                headers: vec![
+                    Header::new("行名", "Row", "FString"),
+                    Header::new("名称", "Name", "FString"),
+                ],
+                rows: vec![row("A", 4), row("C", 5)],
+            }],
+            issues: Vec::new(),
+        };
+        let meta = ReviewMeta {
+            kind: "row_delete_conflict".to_string(),
+            preview_sheet: "#Data".to_string(),
+            source_sheet: "#Data".to_string(),
+            row: "B".to_string(),
+            occurrence: 1,
+            preview_row: 7,
+            original_final: row("B", 5).cells,
+        };
+        let preview = MergePreviewRow {
+            sheet: "#Data".to_string(),
+            row: "B".to_string(),
+            occurrence: 1,
+            kind: "row_delete_conflict".to_string(),
+            base: row("B", 5).cells.clone(),
+            ours: row("B", 5).cells.clone(),
+            theirs: vec![Cell::default(); 2],
+            final_cells: row("B", 5).cells,
+            conflict_columns: Vec::new(),
+            default_decision: ConflictDefault::Theirs,
+            default_keep: false,
+            order_index: 1,
+        };
+
+        apply_review_row(
+            &mut workbook,
+            &meta,
+            &preview,
+            &preview.final_cells,
+            "[修改]",
+        )
+        .unwrap();
+
+        assert_eq!(
+            workbook.sheets[0]
+                .rows
+                .iter()
+                .map(|row| row.key.as_str())
+                .collect::<Vec<_>>(),
+            vec!["A", "B", "C"]
+        );
     }
 }

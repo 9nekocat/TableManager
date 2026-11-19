@@ -93,6 +93,7 @@ pub struct MergePreviewRow {
     pub conflict_columns: Vec<usize>,
     pub default_decision: ConflictDefault,
     pub default_keep: bool,
+    pub order_index: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1499,6 +1500,18 @@ fn build_preview_rows(
                 })
                 .collect::<Vec<_>>();
             let default_keep = merged_row.is_some();
+            let order_index = merged_sheet
+                .and_then(|sheet| find_row_index(sheet, &row_key, occurrence))
+                .or_else(|| {
+                    ours_sheet.and_then(|sheet| find_row_index(sheet, &row_key, occurrence))
+                })
+                .or_else(|| {
+                    theirs_sheet.and_then(|sheet| find_row_index(sheet, &row_key, occurrence))
+                })
+                .or_else(|| {
+                    base_sheet.and_then(|sheet| find_row_index(sheet, &row_key, occurrence))
+                })
+                .unwrap_or(usize::MAX);
             MergePreviewRow {
                 sheet: sheet_name,
                 row: row_key,
@@ -1511,9 +1524,17 @@ fn build_preview_rows(
                 conflict_columns,
                 default_decision: conflict_default,
                 default_keep,
+                order_index,
             }
         })
         .collect()
+}
+
+fn find_row_index(sheet: &Sheet, key: &str, occurrence: usize) -> Option<usize> {
+    sheet
+        .rows
+        .iter()
+        .position(|row| row.key == key && row.occurrence == occurrence)
 }
 
 fn find_row<'a>(sheet: Option<&'a Sheet>, key: &str, occurrence: usize) -> Option<&'a Row> {
