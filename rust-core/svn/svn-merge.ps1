@@ -166,6 +166,19 @@ function Show-MergeTip {
         [string] $Kind = "Information"
     )
 
+    if ($env:TM_SVN_TIP_LOG) {
+        try {
+            [IO.File]::AppendAllText(
+                $env:TM_SVN_TIP_LOG,
+                $Message + [Environment]::NewLine,
+                (New-Object System.Text.UTF8Encoding($false))
+            )
+        }
+        catch {
+            Write-Host "[TableManager] Could not write the tip log: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+        return
+    }
     if (
         $Headless -or
         $env:TM_SVN_NO_OPEN -eq "1" -or
@@ -226,7 +239,16 @@ function Invoke-XlCompareMerge {
     }
     & $xlCompare -merge -titleMine:WORKING -titleBase:BASE -titleTheir:THEIRS `
         $MinePath $BasePath $TheirPath -output:$MergedPath
-    exit $LASTEXITCODE
+    if ($LASTEXITCODE -ne 0) {
+        throw "xlCompare merge failed with exit code $LASTEXITCODE"
+    }
+}
+
+trap {
+    $message = "TableManager merge failed.`n$($_.Exception.Message)"
+    Write-Host "[TableManager] $($_.Exception.Message)" -ForegroundColor Red
+    Show-MergeTip $message -Kind Warning
+    exit 2
 }
 
 if ($SvnArgs.Count -eq 4) {
@@ -246,8 +268,7 @@ elseif ($SvnArgs.Count -ge 5) {
     $workingPath = [IO.Path]::GetFullPath($SvnArgs[4])
 }
 else {
-    [Console]::Error.WriteLine("SVN merge requires four or five file paths.")
-    exit 2
+    throw "SVN merge requires four or five file paths."
 }
 
 if (
@@ -256,10 +277,7 @@ if (
     !(Test-ExcelWorkbook $minePath)
 ) {
     if ($Headless) {
-        [Console]::Error.WriteLine(
-            "Headless mode only handles Excel workbook families: .xlsx, .xlsm, .xlsb and .xls."
-        )
-        exit 2
+        throw "Headless mode only handles Excel workbook families: .xlsx, .xlsm, .xlsb and .xls."
     }
     Invoke-XlCompareMerge $basePath $theirPath $minePath $mergedPath
 }
@@ -280,8 +298,7 @@ $exitCode = $LASTEXITCODE
 
 if ($exitCode -eq 0) {
     if (!(Test-Path -LiteralPath $mergedPath -PathType Leaf) -or (Get-Item -LiteralPath $mergedPath).Length -eq 0) {
-        [Console]::Error.WriteLine("Table merge did not generate an Excel result: $mergedPath")
-        exit 2
+        throw "Table merge did not generate an Excel result: $mergedPath"
     }
     Write-Host "[TableManager] No real conflicts found; merged automatically." -ForegroundColor Green
     Complete-SvnResolution $mergedPath $workingPath
@@ -295,12 +312,11 @@ if ($exitCode -eq 0) {
 }
 
 if ($exitCode -ne 2) {
-    exit $exitCode
+    throw "Table merge failed with exit code $exitCode"
 }
 
 if (!(Test-Path -LiteralPath $reviewPath -PathType Leaf)) {
-    [Console]::Error.WriteLine("Table merge conflict preview was not generated: $reviewPath")
-    exit 2
+    throw "Table merge conflict preview was not generated: $reviewPath"
 }
 
 Write-Host "[TableManager] Real conflicts found; opened a three-way merge review." -ForegroundColor Yellow
@@ -327,12 +343,10 @@ if ($answer -notmatch "^\s*(y|yes)\s*$") {
 & $tableCore resolve-review $reviewPath $basePath $minePath $theirPath `
     --strategy fail --conflict-default $conflictDefault --output $mergedPath
 if ($LASTEXITCODE -ne 0) {
-    [Console]::Error.WriteLine("Applying the merge review failed with exit code $LASTEXITCODE")
-    exit 2
+    throw "Applying the merge review failed with exit code $LASTEXITCODE"
 }
 if (!(Test-Path -LiteralPath $mergedPath -PathType Leaf) -or (Get-Item -LiteralPath $mergedPath).Length -eq 0) {
-    [Console]::Error.WriteLine("Reviewed merge did not generate an Excel result: $mergedPath")
-    exit 2
+    throw "Reviewed merge did not generate an Excel result: $mergedPath"
 }
 
 Complete-SvnResolution $mergedPath $workingPath

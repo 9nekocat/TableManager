@@ -388,6 +388,62 @@ fn svn_headless_wrappers_generate_diff_and_merge_files() {
 }
 
 #[cfg(windows)]
+#[test]
+fn svn_merge_failure_writes_a_tip_message() {
+    let directory = std::env::current_dir()
+        .unwrap()
+        .join("target")
+        .join(format!(
+            "table-core-svn-failure-tip-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+    std::fs::create_dir_all(&directory).unwrap();
+    let base_path = directory.join("base.xlsx");
+    let mine_path = directory.join("mine.xlsx");
+    let theirs_path = directory.join("theirs.xlsx");
+    let merge_path = directory.join("merged.xlsx");
+    let review_path = directory.join("review.xlsx");
+    let wrapper_config = directory.join("svn-wrapper.json");
+    let tip_log = directory.join("tip.log");
+    let failing_core = directory.join("failing-table-core.cmd");
+    write_svn_fixture(&base_path, "Base");
+    write_svn_fixture(&mine_path, "Mine");
+    write_svn_fixture(&theirs_path, "Theirs");
+    std::fs::write(&wrapper_config, r#"{"merge_conflict_default":"theirs"}"#).unwrap();
+    std::fs::write(&failing_core, "@exit 7\r\n").unwrap();
+
+    let status = std::process::Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            concat!(env!("CARGO_MANIFEST_DIR"), "\\svn\\svn-merge.ps1"),
+        ])
+        .arg(&merge_path)
+        .arg(&theirs_path)
+        .arg(&mine_path)
+        .arg(&base_path)
+        .env("TABLE_CORE_EXE", &failing_core)
+        .env("TM_SVN_CONFIG", &wrapper_config)
+        .env("TM_SVN_MERGE_REVIEW", &review_path)
+        .env("TM_SVN_NO_OPEN", "1")
+        .env("TM_SVN_TIP_LOG", &tip_log)
+        .status()
+        .unwrap();
+
+    assert_eq!(status.code(), Some(2));
+    let message = std::fs::read_to_string(&tip_log).unwrap();
+    assert!(message.contains("Table merge failed"));
+    assert!(message.contains("exit code 7"));
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+#[cfg(windows)]
 fn write_svn_fixture(path: &std::path::Path, name: &str) {
     let mut workbook = XlsxWorkbook::new();
     let worksheet = workbook.add_worksheet();
