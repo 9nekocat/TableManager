@@ -1,0 +1,4 @@
+interface:
+  display_name: "TableManager 比对与合并"
+  short_description: "让 AI 用无头纯文本自查，让用户用排列式 Excel 审阅"
+  default_prompt: "Use $tablemanager-diff-merge to compare or merge these Excel tables with the correct AI and user-facing modes."

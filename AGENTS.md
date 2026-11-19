@@ -5,7 +5,8 @@
 
 ## 1. 版本库职责
 
-- Git 只管理源码和工程规则：`rust-core/**`、`.gitignore`、`AGENTS.md`。
+- Git 只管理源码、工程规则和项目级 AI Skill：`rust-core/**`、
+  `.agents/skills/tablemanager-diff-merge/**`、`.gitignore`、`AGENTS.md`。
 - SVN 只管理导出版：根目录的 `table-core.exe`、`svn/**`、`config/**`、
   `configure-svn*.bat` 和导出用 `README.md`。
 - 禁止执行 `svn add rust-core`。`rust-core` 必须在 SVN 中保持删除或忽略状态。
@@ -21,6 +22,7 @@
 .git
 .gitignore
 AGENTS.md
+.agents
 rust-core
 target
 dist
@@ -66,7 +68,7 @@ svn/svn-merge-headless.cmd
 只暂存源码和工程规则：
 
 ```powershell
-git add .gitignore AGENTS.md rust-core
+git add .gitignore AGENTS.md .agents/skills/tablemanager-diff-merge rust-core
 git status --short
 git diff --cached --check
 git commit -m "feat: describe the completed change"
