@@ -6,7 +6,8 @@
 - 新增冲突回写链路：`merge --review-output` 生成预览，`resolve-review` 应用
   `[最终]` 行并输出干净的业务工作簿。
 - `svn-merge` 在无真实冲突时自动合并并执行 `svn resolve --accept working`。
-- 有真实冲突时等待用户关闭 Excel 并在命令窗口确认后写回、清理预览并标记 resolved。
+- 有真实冲突时生成预览，并在命令窗口等待用户确认后写回、清理预览并标记 resolved。
+- 冲突预览改为只读打开；命令行立即进入确认，不再轮询 Excel 锁文件或要求先关闭 Excel。
 - 非无头模式在合并完成或取消后显示 15 秒提示框，避免命令窗口自动关闭导致用户看不到结果。
 - 冲突默认值改为仓库侧 `theirs`，可通过 `merge_conflict_default` 配置为
   `ours` 或 `empty`。

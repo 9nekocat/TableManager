@@ -54,8 +54,9 @@ Merge: "C:\Tools\table-core\svn\svn-merge.cmd" %merged %theirs %mine %base
 - 无真实冲突时自动生成干净的业务工作簿，并执行 `svn resolve --accept working`。
 - 有真实冲突时生成三路合并预览：每张原表页签按 `[基线]`、`[我的]`、`[仓库]`、
   `[最终]` 排列。`[最终]` 行位于每组最下方，并预填配置指定的默认侧。
-- 预览关闭后，命令窗口会要求用户输入 `Y` 确认，再读取 `[最终]` 行写回，
-  最后执行 `svn resolve --accept working`。
+- 预览工作簿以只读方式打开，命令窗口立即等待用户输入 `Y` 确认；用户无需先关闭
+  Excel，由用户自行决定查看完成时间。确认后读取 `[最终]` 行写回，并执行
+  `svn resolve --accept working`。
 - 非无头模式会在合并完成或取消后显示一个 15 秒的 TableManager 提示框，
   避免从 TortoiseSVN 启动时命令窗口一闪而过。
 - 单元格冲突默认使用仓库值 `theirs`；可在 `svn-wrapper.json` 的

@@ -143,18 +143,20 @@ function Get-MergeReviewPath {
     )
 }
 
-function Open-ReviewFileAndWait {
+function Open-ReviewFileReadOnly {
     param([string] $Path)
 
     if ($Headless -or $env:TM_SVN_NO_OPEN -eq "1") {
         return
     }
-    Start-Process -FilePath $Path | Out-Null
-    Start-Sleep -Milliseconds 800
-    $lockPath = Join-Path (Split-Path -Parent $Path) ("~$" + [IO.Path]::GetFileName($Path))
-    while (Test-Path -LiteralPath $lockPath -PathType Leaf) {
-        Start-Sleep -Milliseconds 500
+    try {
+        $item = Get-Item -LiteralPath $Path
+        $item.IsReadOnly = $true
     }
+    catch {
+        Write-Host "[TableManager] Could not mark the review workbook read-only." -ForegroundColor Yellow
+    }
+    Start-Process -FilePath $Path | Out-Null
 }
 
 function Show-MergeTip {
@@ -309,8 +311,9 @@ if ($Headless -or $env:TM_SVN_NO_OPEN -eq "1") {
     exit 2
 }
 
-Open-ReviewFileAndWait $reviewPath
-Write-Host "Confirm the [final] rows in Excel, save, and close Excel." -ForegroundColor Yellow
+Open-ReviewFileReadOnly $reviewPath
+Write-Host "The review workbook is read-only. Review it, then return to this window." -ForegroundColor Yellow
+Write-Host "You do not need to close Excel before confirming." -ForegroundColor Yellow
 $answer = Read-Host "Enter Y to apply the final values and mark resolved; anything else cancels"
 if ($answer -notmatch "^\s*(y|yes)\s*$") {
     Write-Host "[TableManager] Cancelled; the file remains conflicted in SVN." -ForegroundColor Yellow
@@ -334,7 +337,7 @@ if (!(Test-Path -LiteralPath $mergedPath -PathType Leaf) -or (Get-Item -LiteralP
 
 Complete-SvnResolution $mergedPath $workingPath
 if (Test-Path -LiteralPath $reviewPath -PathType Leaf) {
-    Remove-Item -LiteralPath $reviewPath -Force
+    Remove-Item -LiteralPath $reviewPath -Force -ErrorAction SilentlyContinue
 }
 Write-Host "[TableManager] Applied the reviewed values and completed the merge." -ForegroundColor Green
 Show-MergeTip (
