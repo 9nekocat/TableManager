@@ -165,7 +165,6 @@ function Resolve-OutputDirectory {
 function Get-OutputPath {
     param([string] $OutputDirectory, [string] $SourcePath)
 
-    New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
     $sourceName = [IO.Path]::GetFileNameWithoutExtension($SourcePath)
     $safeName = $sourceName -replace "[^A-Za-z0-9._-]", "_"
     return Join-Path $OutputDirectory (
@@ -239,33 +238,46 @@ else {
             Remember = $true
         }
     }
+    # Log comparisons can pass two temporary files, so SOURCE_DIR may itself be under TEMP.
+    $candidates += [pscustomobject]@{
+        Template = Join-Path $PSScriptRoot "..\.temp"
+        ExactPath = $null
+        Remember = $false
+    }
 }
 
 $output = $null
-$exitCode = 2
 $usedCandidate = $null
+$attemptedPaths = @()
 foreach ($candidate in $candidates) {
-    $output = if ($candidate.ExactPath) {
-        $candidate.ExactPath
+    try {
+        $output = if ($candidate.ExactPath) {
+            $candidate.ExactPath
+        }
+        else {
+            $outputDirectory = Resolve-OutputDirectory $candidate.Template $newPath
+            Get-OutputPath $outputDirectory $newPath
+        }
+        if ($output -in $attemptedPaths) {
+            continue
+        }
+        $attemptedPaths += $output
+        New-Item -ItemType Directory -Path (Split-Path -Parent $output) -Force | Out-Null
     }
-    else {
-        $outputDirectory = Resolve-OutputDirectory $candidate.Template $newPath
-        Get-OutputPath $outputDirectory $newPath
-    }
-    $outputParent = Split-Path -Parent $output
-    if ($outputParent) {
-        New-Item -ItemType Directory -Path $outputParent -Force | Out-Null
+    catch {
+        [Console]::Error.WriteLine("Cannot prepare diff output: $($_.Exception.Message)")
+        continue
     }
     & $tableCore diff $oldPath $newPath --format excel --layout arranged --output $output
-    $exitCode = $LASTEXITCODE
     if (
+        ($LASTEXITCODE -in @(0, 1)) -and
         (Test-Path -LiteralPath $output -PathType Leaf) -and
         (Get-Item -LiteralPath $output).Length -gt 0
     ) {
         $usedCandidate = $candidate
         break
     }
-    [Console]::Error.WriteLine("Diff output failed, trying fallback directory: $output")
+    [Console]::Error.WriteLine("Diff output failed: $output")
 }
 
 if (!$usedCandidate) {
@@ -284,7 +296,4 @@ if (
 }
 
 Open-ReviewFile $output
-if ($exitCode -eq 0 -or $exitCode -eq 1) {
-    exit 0
-}
-exit $exitCode
+exit 0

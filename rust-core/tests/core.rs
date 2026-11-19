@@ -290,33 +290,45 @@ fn svn_headless_wrappers_generate_diff_and_merge_files() {
     let theirs_path = directory.join("theirs.xlsx");
     let wrapper_config = directory.join("svn-wrapper.json");
     let merge_path = directory.join("merged.xlsx");
-    let review_path = directory.join("merge-review.xlsx");
+    let package = directory.join("Table Manager");
+    let wrappers = package.join("svn");
+    std::fs::create_dir_all(&wrappers).unwrap();
+    let diff_script = wrappers.join("svn-diff.ps1");
+    let merge_script = wrappers.join("svn-merge.ps1");
+    std::fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "\\svn\\svn-diff.ps1"),
+        &diff_script,
+    )
+    .unwrap();
+    std::fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "\\svn\\svn-merge.ps1"),
+        &merge_script,
+    )
+    .unwrap();
+    std::fs::write(directory.join("blocked"), "").unwrap();
     std::fs::write(
         &wrapper_config,
-        r#"{"diff_output_dir":"%TEMP%\\TableManager\\SVN","fallback_diff_output_dir":"${SOURCE_DIR}\\.temp","remember_output_dir":true,"merge_conflict_default":"theirs"}"#,
+        r#"{"diff_output_dir":"${SOURCE_DIR}\\blocked","fallback_diff_output_dir":"${SOURCE_DIR}\\.temp","remember_output_dir":true,"merge_conflict_default":"theirs"}"#,
     )
     .unwrap();
     write_svn_fixture(&base_path, "Alpha");
     write_svn_fixture(&mine_path, "Ours");
     write_svn_fixture(&theirs_path, "Theirs");
 
-    let diff = std::process::Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            concat!(env!("CARGO_MANIFEST_DIR"), "\\svn\\svn-diff.ps1"),
-        ])
-        .arg(&base_path)
-        .arg(&mine_path)
-        .env("TABLE_CORE_EXE", env!("CARGO_BIN_EXE_table-core"))
-        .env("TM_SVN_CONFIG", &wrapper_config)
-        .env("TM_SVN_HEADLESS", "1")
-        .env("TM_SVN_NO_OPEN", "1")
-        .status()
-        .unwrap();
-    assert!(diff.success());
+    let run_diff = |old: &std::path::Path, new: &std::path::Path| {
+        std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(&diff_script)
+            .arg(old)
+            .arg(new)
+            .env("TABLE_CORE_EXE", env!("CARGO_BIN_EXE_table-core"))
+            .env("TM_SVN_CONFIG", &wrapper_config)
+            .env("TM_SVN_HEADLESS", "1")
+            .env("TM_SVN_NO_OPEN", "1")
+            .status()
+            .unwrap()
+    };
+    assert!(run_diff(&base_path, &mine_path).success());
     let generated_diff = std::fs::read_dir(directory.join(".temp"))
         .unwrap()
         .filter_map(Result::ok)
@@ -338,28 +350,63 @@ fn svn_headless_wrappers_generate_diff_and_merge_files() {
         Some("theirs")
     );
 
+    let history = directory.join("tortoise-history");
+    std::fs::create_dir(&history).unwrap();
+    std::fs::write(history.join(".temp"), "").unwrap();
+    let old_revision = history.join("Card.xlsx-rev1.svn000.tmp.xlsx");
+    let new_revision = history.join("Card.xlsx-rev2.svn000.tmp.xlsx");
+    std::fs::copy(&base_path, &old_revision).unwrap();
+    std::fs::copy(&mine_path, &new_revision).unwrap();
+    assert!(run_diff(&old_revision, &new_revision).success());
+    let package_reports = package.join(".temp");
+    let history_report = std::fs::read_dir(&package_reports)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("diff-Card.xlsx-rev2")
+        })
+        .expect("history diff report in package .temp");
+    let report = open_workbook_auto(&history_report).unwrap();
+    assert_eq!(report.sheet_names(), vec!["#Data", "比对报告"]);
+    let after_history: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&wrapper_config).unwrap()).unwrap();
+    assert_eq!(after_history, remembered);
+
+    std::fs::copy(&mine_path, &merge_path).unwrap();
     let merge = std::process::Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            concat!(env!("CARGO_MANIFEST_DIR"), "\\svn\\svn-merge.ps1"),
-        ])
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+        .arg(&merge_script)
         .arg(&merge_path)
         .arg(&theirs_path)
         .arg(&mine_path)
         .arg(&base_path)
         .env("TABLE_CORE_EXE", env!("CARGO_BIN_EXE_table-core"))
         .env("TM_SVN_CONFIG", &wrapper_config)
-        .env("TM_SVN_MERGE_REVIEW", &review_path)
+        .env_remove("TM_SVN_MERGE_REVIEW")
         .env("TM_SVN_HEADLESS", "1")
         .env("TM_SVN_NO_OPEN", "1")
         .status()
         .unwrap();
     assert_eq!(merge.code(), Some(2));
-    assert!(!merge_path.is_file());
-    assert!(review_path.is_file());
+    assert_eq!(
+        std::fs::read(&merge_path).unwrap(),
+        std::fs::read(&mine_path).unwrap()
+    );
+    let review_path = std::fs::read_dir(&package_reports)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("merge-merged-")
+        })
+        .expect("conflict review in package .temp");
+    let review = open_workbook_auto(&review_path).unwrap();
+    assert!(review.sheet_names().iter().any(|name| name == "_MergeMeta"));
 
     let non_conflict_merge_path = directory.join("non-conflict-merged.xlsx");
     let non_conflict_review_path = directory.join("non-conflict-review.xlsx");

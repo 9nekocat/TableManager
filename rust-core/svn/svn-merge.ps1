@@ -134,7 +134,7 @@ function Get-MergeReviewPath {
         }
         return $path
     }
-    $directory = Join-Path ([IO.Path]::GetTempPath()) "TableManager\SVN"
+    $directory = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.temp"))
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
     $name = [IO.Path]::GetFileNameWithoutExtension($MergedPath)
     $safeName = $name -replace "[^A-Za-z0-9._-]", "_"
@@ -315,7 +315,7 @@ if ($exitCode -ne 2) {
     throw "Table merge failed with exit code $exitCode"
 }
 
-if (!(Test-Path -LiteralPath $reviewPath -PathType Leaf)) {
+if (!(Test-Path -LiteralPath $reviewPath -PathType Leaf) -or (Get-Item -LiteralPath $reviewPath).Length -eq 0) {
     throw "Table merge conflict preview was not generated: $reviewPath"
 }
 

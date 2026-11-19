@@ -53,7 +53,8 @@ Merge: "C:\Tools\table-core\svn\svn-merge.cmd" %merged %theirs %mine %base
 - xlsx 族差异会生成排列模式报告：每个原表页签独立，最后是比对报告。
 - 无真实冲突时自动生成干净的业务工作簿，并执行 `svn resolve --accept working`。
 - 有真实冲突时生成三路合并预览：每张原表页签按 `[基线]`、`[我的]`、`[仓库]`、
-  `[最终]` 排列。`[最终]` 行位于每组最下方，并预填配置指定的默认侧。
+  `[最终]` 排列。`[最终]` 行位于每组最下方，并预填配置指定的默认侧。预览默认保存到
+  TableManager 目录下的 `.temp`。
 - 预览工作簿以只读方式打开，命令窗口立即等待用户输入 `Y` 确认；用户无需先关闭
   Excel，由用户自行决定查看完成时间。确认后读取 `[最终]` 行写回，并执行
   `svn resolve --accept working`。
@@ -77,7 +78,7 @@ TABLE_CORE_SVN_DIR   指定包含 svn-diff.cmd / svn-merge.cmd 的目录
 TM_SVN_NO_OPEN=1     只生成文件，不打开 Excel
 TM_SVN_HEADLESS=1    无头模式；不打开 Excel，也不回退到外部工具
 TM_SVN_OUTPUT        指定 diff 输出文件，主要用于自动化测试
-TM_SVN_OUTPUT_DIR    指定 diff 输出目录；默认使用工作文件旁边的 .temp
+TM_SVN_OUTPUT_DIR    指定 diff 首选输出目录
 TM_SVN_CONFIG        指定包装器配置文件；默认使用用户级 config\svn-wrapper.json
 TM_SVN_MERGE_REVIEW  指定冲突预览文件路径，主要用于自动化测试
 TM_SVN_NO_TIP=1      不显示合并结束提示框
@@ -100,9 +101,10 @@ TM_SVN_NO_TIP=1      不显示合并结束提示框
 }
 ```
 
-首选目录写入失败时会自动尝试回退目录。`remember_output_dir` 为 `true` 时，成功的
-回退路径会写回配置，后续比对直接使用该路径。`${SOURCE_DIR}` 表示当前被比对工作表
-所在目录。也可以把 `diff_output_dir` 改为任意绝对路径。
+首选目录写入失败时会自动尝试配置中的回退目录，再尝试 TableManager 目录下的 `.temp`。
+`remember_output_dir` 为 `true` 时，配置中的回退目录写入成功后会被记为首选目录。
+`${SOURCE_DIR}` 表示当前被比对工作表所在目录，在 TortoiseSVN 日志中比对时可能指向
+历史版本的临时目录。也可以把 `diff_output_dir` 改为任意绝对路径。
 
 `merge_conflict_default` 支持：
 
