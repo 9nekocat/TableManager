@@ -53,8 +53,7 @@ fn deletion_choice_to_keep(
         MergeStrategy::Theirs => missing_side != "theirs",
         MergeStrategy::Fail => match conflict_default {
             ConflictDefault::Ours => missing_side != "ours",
-            ConflictDefault::Theirs => missing_side != "theirs",
-            ConflictDefault::Empty => false,
+            ConflictDefault::Theirs | ConflictDefault::Empty => missing_side != "theirs",
         },
     }
 }

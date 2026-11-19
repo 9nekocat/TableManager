@@ -730,6 +730,44 @@ fn merge_respects_row_and_column_deletion_strategy() {
 }
 
 #[test]
+fn empty_conflict_default_does_not_delete_a_sheet_modified_by_theirs() {
+    let base = table(
+        "base",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[("A", &[("Row", "A"), ("Name", "Base")])],
+    );
+    let ours = Workbook {
+        path: "ours".to_string(),
+        sheets: Vec::new(),
+        issues: Vec::new(),
+    };
+    let theirs = table(
+        "theirs",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[("A", &[("Row", "A"), ("Name", "Remote")])],
+    );
+
+    let result = merge_workbooks_with_conflict_default(
+        &base,
+        &ours,
+        &theirs,
+        MergeStrategy::Fail,
+        ConflictDefault::Empty,
+    );
+
+    assert!(
+        result
+            .conflicts()
+            .any(|change| change.kind == "sheet_delete_conflict")
+    );
+    let sheet = result
+        .workbook
+        .sheet("#Data")
+        .expect("empty should fall back to theirs for structural deletion conflicts");
+    assert_eq!(sheet.rows[0].cells[1].value, "Remote");
+}
+
+#[test]
 fn merge_review_uses_three_way_rows_and_theirs_default() {
     let base = table(
         "base",
