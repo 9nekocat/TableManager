@@ -444,6 +444,169 @@ fn svn_merge_failure_writes_a_tip_message() {
 }
 
 #[cfg(windows)]
+#[test]
+fn svn_merge_marks_a_real_working_copy_conflict_resolved() {
+    let directory = std::env::current_dir()
+        .unwrap()
+        .join("target")
+        .join(format!(
+            "table-core-svn-resolve-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+    std::fs::create_dir_all(&directory).unwrap();
+    let repo = directory.join("repo");
+    let wc1 = directory.join("wc1");
+    let wc2 = directory.join("wc2");
+    let wrapper_config = directory.join("svn-wrapper.json");
+    std::fs::write(&wrapper_config, r#"{"merge_conflict_default":"theirs"}"#).unwrap();
+
+    assert!(
+        std::process::Command::new("svnadmin")
+            .arg("create")
+            .arg(&repo)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let repo_url = format!("file:///{}", repo.to_string_lossy().replace('\\', "/"));
+    for working_copy in [&wc1, &wc2] {
+        assert!(
+            std::process::Command::new("svn")
+                .arg("checkout")
+                .arg(&repo_url)
+                .arg(working_copy)
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+
+    let file1 = wc1.join("Card.xlsx");
+    write_svn_fixture(&file1, "Base");
+    assert!(
+        std::process::Command::new("svn")
+            .arg("add")
+            .arg(&file1)
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert!(
+        std::process::Command::new("svn")
+            .arg("commit")
+            .arg("-m")
+            .arg("base")
+            .arg(&wc1)
+            .status()
+            .unwrap()
+            .success()
+    );
+
+    let file2 = wc2.join("Card.xlsx");
+    assert!(
+        std::process::Command::new("svn")
+            .arg("update")
+            .arg(&wc2)
+            .status()
+            .unwrap()
+            .success()
+    );
+    write_svn_fixture(&file2, "Theirs");
+    assert!(
+        std::process::Command::new("svn")
+            .arg("commit")
+            .arg("-m")
+            .arg("theirs")
+            .arg(&wc2)
+            .status()
+            .unwrap()
+            .success()
+    );
+
+    write_svn_fixture(&file1, "Mine");
+    assert!(
+        std::process::Command::new("svn")
+            .arg("update")
+            .arg("--accept")
+            .arg("postpone")
+            .arg(&wc1)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let conflicted = String::from_utf8(
+        std::process::Command::new("svn")
+            .arg("status")
+            .arg(&file1)
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    assert!(
+        conflicted.starts_with('C'),
+        "expected C status: {conflicted}"
+    );
+
+    let mut conflict_files = std::fs::read_dir(&wc1)
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("Card.xlsx.r"))
+        })
+        .collect::<Vec<_>>();
+    conflict_files.sort();
+    let base_path = conflict_files.first().expect("base conflict file");
+    let theirs_path = conflict_files.last().expect("theirs conflict file");
+
+    let status = std::process::Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            concat!(env!("CARGO_MANIFEST_DIR"), "\\svn\\svn-merge.ps1"),
+        ])
+        .arg(base_path)
+        .arg(theirs_path)
+        .arg(base_path)
+        .arg(&file1)
+        .arg(&file1)
+        .env("TABLE_CORE_EXE", env!("CARGO_BIN_EXE_table-core"))
+        .env("TM_SVN_CONFIG", &wrapper_config)
+        .env("TM_SVN_HEADLESS", "1")
+        .status()
+        .unwrap();
+    assert_eq!(status.code(), Some(0));
+
+    let resolved_status = String::from_utf8(
+        std::process::Command::new("svn")
+            .arg("status")
+            .arg(&file1)
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    assert!(
+        !resolved_status.starts_with('C'),
+        "still conflicted: {resolved_status}"
+    );
+    assert!(
+        resolved_status.starts_with('M'),
+        "expected M status: {resolved_status}"
+    );
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+#[cfg(windows)]
 fn write_svn_fixture(path: &std::path::Path, name: &str) {
     let mut workbook = XlsxWorkbook::new();
     let worksheet = workbook.add_worksheet();
