@@ -23,6 +23,7 @@ function Get-WrapperConfig {
         diff_output_dir = "%TEMP%\TableManager\SVN"
         fallback_diff_output_dir = '${SOURCE_DIR}\.temp'
         remember_output_dir = $true
+        merge_conflict_default = "theirs"
     }
     $sourceConfigPath = if (Test-Path -LiteralPath $WrapperConfigPath -PathType Leaf) {
         $WrapperConfigPath
@@ -36,7 +37,12 @@ function Get-WrapperConfig {
     if ($sourceConfigPath) {
         try {
             $loaded = Get-Content -LiteralPath $sourceConfigPath -Raw | ConvertFrom-Json
-            foreach ($name in @("diff_output_dir", "fallback_diff_output_dir", "remember_output_dir")) {
+            foreach ($name in @(
+                "diff_output_dir",
+                "fallback_diff_output_dir",
+                "remember_output_dir",
+                "merge_conflict_default"
+            )) {
                 if ($null -ne $loaded.$name) {
                     $config.$name = $loaded.$name
                 }

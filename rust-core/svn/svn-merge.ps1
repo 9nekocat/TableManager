@@ -10,6 +10,49 @@ foreach ($argument in @($args)) {
     }
 }
 
+$ShippedConfigPath = Join-Path $PSScriptRoot "..\config\svn-wrapper.json"
+$WrapperConfigPath = if ($env:TM_SVN_CONFIG) {
+    [IO.Path]::GetFullPath($env:TM_SVN_CONFIG)
+}
+else {
+    Join-Path $env:LOCALAPPDATA "CatsInTheShell\TableManager\config\svn-wrapper.json"
+}
+
+function Get-WrapperConfig {
+    $config = [pscustomobject]@{
+        merge_conflict_default = "theirs"
+    }
+    $sourceConfigPath = if (Test-Path -LiteralPath $WrapperConfigPath -PathType Leaf) {
+        $WrapperConfigPath
+    }
+    elseif (Test-Path -LiteralPath $ShippedConfigPath -PathType Leaf) {
+        $ShippedConfigPath
+    }
+    else {
+        $null
+    }
+    if ($sourceConfigPath) {
+        try {
+            $loaded = Get-Content -LiteralPath $sourceConfigPath -Raw | ConvertFrom-Json
+            if ($loaded.merge_conflict_default) {
+                $config.merge_conflict_default = ([string] $loaded.merge_conflict_default).ToLowerInvariant()
+            }
+        }
+        catch {
+            [Console]::Error.WriteLine(
+                "Cannot read SVN wrapper config '$sourceConfigPath': $($_.Exception.Message)"
+            )
+        }
+    }
+    if ($config.merge_conflict_default -notin @("ours", "theirs", "empty")) {
+        [Console]::Error.WriteLine(
+            "Invalid merge_conflict_default '$($config.merge_conflict_default)'; using 'theirs'."
+        )
+        $config.merge_conflict_default = "theirs"
+    }
+    return $config
+}
+
 function Get-TableCorePath {
     if ($env:TABLE_CORE_EXE -and (Test-Path -LiteralPath $env:TABLE_CORE_EXE -PathType Leaf)) {
         return (Resolve-Path -LiteralPath $env:TABLE_CORE_EXE).Path
@@ -80,12 +123,67 @@ function Test-ExcelWorkbook {
     }
 }
 
-function Open-ReviewFile {
+function Get-MergeReviewPath {
+    param([string] $MergedPath)
+
+    if ($env:TM_SVN_MERGE_REVIEW) {
+        $path = [IO.Path]::GetFullPath($env:TM_SVN_MERGE_REVIEW)
+        $parent = Split-Path -Parent $path
+        if ($parent) {
+            New-Item -ItemType Directory -Path $parent -Force | Out-Null
+        }
+        return $path
+    }
+    $directory = Join-Path ([IO.Path]::GetTempPath()) "TableManager\SVN"
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    $name = [IO.Path]::GetFileNameWithoutExtension($MergedPath)
+    $safeName = $name -replace "[^A-Za-z0-9._-]", "_"
+    return Join-Path $directory (
+        "merge-{0}-{1}-{2}.xlsx" -f $safeName, (Get-Date -Format "yyyyMMdd-HHmmss"), $PID
+    )
+}
+
+function Open-ReviewFileAndWait {
     param([string] $Path)
 
-    if (!$Headless -and $env:TM_SVN_NO_OPEN -ne "1") {
-        Start-Process -FilePath $Path | Out-Null
+    if ($Headless -or $env:TM_SVN_NO_OPEN -eq "1") {
+        return
     }
+    Start-Process -FilePath $Path | Out-Null
+    Start-Sleep -Milliseconds 800
+    $lockPath = Join-Path (Split-Path -Parent $Path) ("~$" + [IO.Path]::GetFileName($Path))
+    while (Test-Path -LiteralPath $lockPath -PathType Leaf) {
+        Start-Sleep -Milliseconds 500
+    }
+}
+
+function Complete-SvnResolution {
+    param(
+        [string] $MergedPath,
+        [string] $WorkingPath
+    )
+
+    if (
+        $WorkingPath -and
+        ([IO.Path]::GetFullPath($WorkingPath) -ne [IO.Path]::GetFullPath($MergedPath))
+    ) {
+        Copy-Item -LiteralPath $MergedPath -Destination $WorkingPath -Force
+    }
+    $target = if ($WorkingPath) { $WorkingPath } else { $MergedPath }
+    $previousErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
+    & svn info --show-item wc-root -- $target > $null 2>&1
+    $isWorkingCopy = $LASTEXITCODE -eq 0
+    $ErrorActionPreference = $previousErrorAction
+    if (!$isWorkingCopy) {
+        Write-Host "[TableManager] Target is not in an SVN working copy; skipped svn resolve." -ForegroundColor Yellow
+        return
+    }
+    & svn resolve --accept working -- $target
+    if ($LASTEXITCODE -ne 0) {
+        throw "svn resolve --accept working failed for: $target"
+    }
+    Write-Host "[TableManager] Marked SVN resolved: $target" -ForegroundColor Green
 }
 
 function Invoke-XlCompareMerge {
@@ -111,6 +209,7 @@ if ($SvnArgs.Count -eq 4) {
     $theirPath = [IO.Path]::GetFullPath($SvnArgs[1])
     $minePath = [IO.Path]::GetFullPath($SvnArgs[2])
     $basePath = [IO.Path]::GetFullPath($SvnArgs[3])
+    $workingPath = $mergedPath
 }
 elseif ($SvnArgs.Count -ge 5) {
     # svn CLI: base theirs mine merged wcfile
@@ -118,6 +217,7 @@ elseif ($SvnArgs.Count -ge 5) {
     $theirPath = [IO.Path]::GetFullPath($SvnArgs[1])
     $minePath = [IO.Path]::GetFullPath($SvnArgs[2])
     $mergedPath = [IO.Path]::GetFullPath($SvnArgs[3])
+    $workingPath = [IO.Path]::GetFullPath($SvnArgs[4])
 }
 else {
     [Console]::Error.WriteLine("SVN merge requires four or five file paths.")
@@ -139,24 +239,69 @@ if (
 }
 
 $tableCore = Get-TableCorePath
+$config = Get-WrapperConfig
+$conflictDefault = [string] $config.merge_conflict_default
+$reviewPath = Get-MergeReviewPath $mergedPath
 $mergedParent = Split-Path -Parent $mergedPath
 if ($mergedParent) {
     New-Item -ItemType Directory -Path $mergedParent -Force | Out-Null
 }
 
 & $tableCore merge $basePath $minePath $theirPath `
-    --strategy fail --allow-conflicts --report text --output $mergedPath
+    --strategy fail --conflict-default $conflictDefault --report text `
+    --output $mergedPath --review-output $reviewPath
 $exitCode = $LASTEXITCODE
 
-if (!(Test-Path -LiteralPath $mergedPath -PathType Leaf) -or (Get-Item -LiteralPath $mergedPath).Length -eq 0) {
-    [Console]::Error.WriteLine("Table merge did not generate an Excel result: $mergedPath")
+if ($exitCode -eq 0) {
+    if (!(Test-Path -LiteralPath $mergedPath -PathType Leaf) -or (Get-Item -LiteralPath $mergedPath).Length -eq 0) {
+        [Console]::Error.WriteLine("Table merge did not generate an Excel result: $mergedPath")
+        exit 2
+    }
+    Write-Host "[TableManager] No real conflicts found; merged automatically." -ForegroundColor Green
+    Complete-SvnResolution $mergedPath $workingPath
+    Write-Host "[TableManager] Merge completed." -ForegroundColor Green
+    exit 0
+}
+
+if ($exitCode -ne 2) {
+    exit $exitCode
+}
+
+if (!(Test-Path -LiteralPath $reviewPath -PathType Leaf)) {
+    [Console]::Error.WriteLine("Table merge conflict preview was not generated: $reviewPath")
     exit 2
 }
 
-Open-ReviewFile $mergedPath
+Write-Host "[TableManager] Real conflicts found; opened a three-way merge review." -ForegroundColor Yellow
+Write-Host "  Default conflict side: $conflictDefault"
+Write-Host "  Review file: $reviewPath"
 
-# Exit code 2 means the review workbook was written but unresolved conflicts remain.
-if ($exitCode -eq 0 -or $exitCode -eq 2) {
-    exit $exitCode
+if ($Headless -or $env:TM_SVN_NO_OPEN -eq "1") {
+    exit 2
 }
-exit $exitCode
+
+Open-ReviewFileAndWait $reviewPath
+Write-Host "Confirm the [final] rows in Excel, save, and close Excel." -ForegroundColor Yellow
+$answer = Read-Host "Enter Y to apply the final values and mark resolved; anything else cancels"
+if ($answer -notmatch "^\s*(y|yes)\s*$") {
+    Write-Host "[TableManager] Cancelled; the file remains conflicted in SVN." -ForegroundColor Yellow
+    exit 2
+}
+
+& $tableCore resolve-review $reviewPath $basePath $minePath $theirPath `
+    --strategy fail --conflict-default $conflictDefault --output $mergedPath
+if ($LASTEXITCODE -ne 0) {
+    [Console]::Error.WriteLine("Applying the merge review failed with exit code $LASTEXITCODE")
+    exit 2
+}
+if (!(Test-Path -LiteralPath $mergedPath -PathType Leaf) -or (Get-Item -LiteralPath $mergedPath).Length -eq 0) {
+    [Console]::Error.WriteLine("Reviewed merge did not generate an Excel result: $mergedPath")
+    exit 2
+}
+
+Complete-SvnResolution $mergedPath $workingPath
+if (Test-Path -LiteralPath $reviewPath -PathType Leaf) {
+    Remove-Item -LiteralPath $reviewPath -Force
+}
+Write-Host "[TableManager] Applied the reviewed values and completed the merge." -ForegroundColor Green
+exit 0

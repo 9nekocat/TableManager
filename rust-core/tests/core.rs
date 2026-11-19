@@ -2,9 +2,12 @@ use calamine::{Data, Reader, open_workbook_auto};
 use rust_xlsxwriter::Workbook as XlsxWorkbook;
 use table_core::diff_workbooks;
 use table_core::formula::analyze_formula;
-use table_core::merge::{MergeStrategy, merge_workbooks};
+use table_core::merge::{
+    ConflictDefault, MergeStrategy, merge_workbooks, merge_workbooks_with_conflict_default,
+};
+use table_core::merge_review::apply_merge_review;
 use table_core::model::{Cell, Header, Row, Sheet, Workbook};
-use table_core::output::{write_diff_excel_with_layout, write_merge_excel};
+use table_core::output::{write_diff_excel_with_layout, write_merge_excel, write_merge_review};
 use table_core::snapshot::workbook_to_text;
 use table_core::{DiffExcelLayout, DiffReportLabels, Issue};
 
@@ -285,9 +288,10 @@ fn svn_headless_wrappers_generate_diff_and_merge_files() {
     let theirs_path = directory.join("theirs.xlsx");
     let wrapper_config = directory.join("svn-wrapper.json");
     let merge_path = directory.join("merged.xlsx");
+    let review_path = directory.join("merge-review.xlsx");
     std::fs::write(
         &wrapper_config,
-        r#"{"diff_output_dir":"%TEMP%\\TableManager\\SVN","fallback_diff_output_dir":"${SOURCE_DIR}\\.temp","remember_output_dir":true}"#,
+        r#"{"diff_output_dir":"%TEMP%\\TableManager\\SVN","fallback_diff_output_dir":"${SOURCE_DIR}\\.temp","remember_output_dir":true,"merge_conflict_default":"theirs"}"#,
     )
     .unwrap();
     write_svn_fixture(&base_path, "Alpha");
@@ -327,6 +331,10 @@ fn svn_headless_wrappers_generate_diff_and_merge_files() {
         remembered["diff_output_dir"].as_str(),
         Some(r"${SOURCE_DIR}\.temp")
     );
+    assert_eq!(
+        remembered["merge_conflict_default"].as_str(),
+        Some("theirs")
+    );
 
     let merge = std::process::Command::new("powershell.exe")
         .args([
@@ -341,12 +349,41 @@ fn svn_headless_wrappers_generate_diff_and_merge_files() {
         .arg(&mine_path)
         .arg(&base_path)
         .env("TABLE_CORE_EXE", env!("CARGO_BIN_EXE_table-core"))
+        .env("TM_SVN_CONFIG", &wrapper_config)
+        .env("TM_SVN_MERGE_REVIEW", &review_path)
         .env("TM_SVN_HEADLESS", "1")
         .env("TM_SVN_NO_OPEN", "1")
         .status()
         .unwrap();
     assert_eq!(merge.code(), Some(2));
-    assert!(merge_path.is_file());
+    assert!(!merge_path.is_file());
+    assert!(review_path.is_file());
+
+    let non_conflict_merge_path = directory.join("non-conflict-merged.xlsx");
+    let non_conflict_review_path = directory.join("non-conflict-review.xlsx");
+    write_svn_fixture(&mine_path, "Alpha");
+    let merge = std::process::Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            concat!(env!("CARGO_MANIFEST_DIR"), "\\svn\\svn-merge.ps1"),
+        ])
+        .arg(&non_conflict_merge_path)
+        .arg(&theirs_path)
+        .arg(&mine_path)
+        .arg(&base_path)
+        .env("TABLE_CORE_EXE", env!("CARGO_BIN_EXE_table-core"))
+        .env("TM_SVN_CONFIG", &wrapper_config)
+        .env("TM_SVN_MERGE_REVIEW", &non_conflict_review_path)
+        .env("TM_SVN_HEADLESS", "1")
+        .env("TM_SVN_NO_OPEN", "1")
+        .status()
+        .unwrap();
+    assert_eq!(merge.code(), Some(0));
+    assert!(non_conflict_merge_path.is_file());
+    assert!(!non_conflict_review_path.is_file());
     let _ = std::fs::remove_dir_all(directory);
 }
 
@@ -366,6 +403,45 @@ fn write_svn_fixture(path: &std::path::Path, name: &str) {
     }
     for (column, value) in ["A", name, "1"].into_iter().enumerate() {
         worksheet.write_string(3, column as u16, value).unwrap();
+    }
+    workbook.save(path).unwrap();
+}
+
+fn write_model_workbook(path: &std::path::Path, model: &Workbook) {
+    let mut workbook = XlsxWorkbook::new();
+    for sheet in &model.sheets {
+        let worksheet = workbook.add_worksheet();
+        worksheet.set_name(&sheet.name).unwrap();
+        for (column, header) in sheet.headers.iter().enumerate() {
+            worksheet
+                .write_string(0, column as u16, &header.cn)
+                .unwrap();
+            worksheet
+                .write_string(1, column as u16, &header.en)
+                .unwrap();
+            worksheet
+                .write_string(2, column as u16, &header.type_name)
+                .unwrap();
+        }
+        for (row_offset, row) in sheet.rows.iter().enumerate() {
+            let excel_row = 3 + row_offset as u32;
+            for (column, cell) in row.cells.iter().enumerate() {
+                if let Some(formula) = &cell.formula {
+                    let formula = if formula.starts_with('=') {
+                        formula.clone()
+                    } else {
+                        format!("={formula}")
+                    };
+                    worksheet
+                        .write_formula(excel_row, column as u16, formula.as_str())
+                        .unwrap();
+                } else if !cell.value.is_empty() {
+                    worksheet
+                        .write_string(excel_row, column as u16, &cell.value)
+                        .unwrap();
+                }
+            }
+        }
     }
     workbook.save(path).unwrap();
 }
@@ -651,6 +727,201 @@ fn merge_respects_row_and_column_deletion_strategy() {
     let theirs_result = merge_workbooks(&base, &ours, &theirs, MergeStrategy::Theirs);
     assert!(theirs_result.ok());
     assert_eq!(theirs_result.workbook.sheet("#Data").unwrap().rows.len(), 2);
+}
+
+#[test]
+fn merge_review_uses_three_way_rows_and_theirs_default() {
+    let base = table(
+        "base",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[("A", &[("Row", "A"), ("Name", "Base")])],
+    );
+    let ours = table(
+        "ours",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[("A", &[("Row", "A"), ("Name", "Mine")])],
+    );
+    let theirs = table(
+        "theirs",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[("A", &[("Row", "A"), ("Name", "Remote")])],
+    );
+    let result = merge_workbooks_with_conflict_default(
+        &base,
+        &ours,
+        &theirs,
+        MergeStrategy::Fail,
+        ConflictDefault::Theirs,
+    );
+    assert_eq!(result.preview_rows.len(), 1);
+    assert_eq!(result.preview_rows[0].final_cells[1].value, "Remote");
+
+    let path = std::env::current_dir()
+        .unwrap()
+        .join("target")
+        .join(format!(
+            "table-core-merge-review-{}-{}.xlsx",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+    write_merge_review(&result, &path).unwrap();
+    let mut workbook = open_workbook_auto(&path).unwrap();
+    assert_eq!(workbook.sheet_names(), vec!["#Data", "_MergeMeta"]);
+    let range = workbook.worksheet_range("#Data").unwrap();
+    assert_eq!(cell_text(&range, 3, 0), "[基线]");
+    assert_eq!(cell_text(&range, 4, 0), "[我的]");
+    assert_eq!(cell_text(&range, 5, 0), "[仓库]");
+    assert_eq!(cell_text(&range, 6, 0), "[最终]");
+    assert_eq!(cell_text(&range, 6, 1), "[仓库]");
+    assert_eq!(cell_text(&range, 6, 3), "Remote");
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn merge_review_applies_default_and_configurable_side() {
+    let directory = std::env::current_dir()
+        .unwrap()
+        .join("target")
+        .join(format!(
+            "table-core-merge-review-apply-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+    std::fs::create_dir_all(&directory).unwrap();
+    let base = table(
+        "base",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[("A", &[("Row", "A"), ("Name", "Base")])],
+    );
+    let ours = table(
+        "ours",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[("A", &[("Row", "A"), ("Name", "Mine")])],
+    );
+    let theirs = table(
+        "theirs",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[("A", &[("Row", "A"), ("Name", "Remote")])],
+    );
+    let base_path = directory.join("base.xlsx");
+    let ours_path = directory.join("ours.xlsx");
+    let theirs_path = directory.join("theirs.xlsx");
+    write_model_workbook(&base_path, &base);
+    write_model_workbook(&ours_path, &ours);
+    write_model_workbook(&theirs_path, &theirs);
+
+    for (default, expected) in [
+        (ConflictDefault::Theirs, "Remote"),
+        (ConflictDefault::Ours, "Mine"),
+        (ConflictDefault::Empty, ""),
+    ] {
+        let result = merge_workbooks_with_conflict_default(
+            &base,
+            &ours,
+            &theirs,
+            MergeStrategy::Fail,
+            default,
+        );
+        let review = directory.join(format!("review-{}.xlsx", default.as_str()));
+        let output = directory.join(format!("resolved-{}.xlsx", default.as_str()));
+        write_merge_review(&result, &review).unwrap();
+        let applied = apply_merge_review(
+            &review,
+            &base_path,
+            &ours_path,
+            &theirs_path,
+            MergeStrategy::Fail,
+            default,
+            &output,
+        )
+        .unwrap();
+        assert_eq!(applied, 1);
+        let resolved = table_core::model::read_workbook(&output).unwrap();
+        assert_eq!(
+            resolved.sheet("#Data").unwrap().rows[0].cells[1].value,
+            expected
+        );
+    }
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+#[test]
+fn merge_review_applies_delete_conflict_default() {
+    let directory = std::env::current_dir()
+        .unwrap()
+        .join("target")
+        .join(format!(
+            "table-core-merge-review-delete-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+    std::fs::create_dir_all(&directory).unwrap();
+    let base = table(
+        "base",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[
+            ("A", &[("Row", "A"), ("Name", "Alpha")]),
+            ("B", &[("Row", "B"), ("Name", "Beta")]),
+        ],
+    );
+    let ours = table(
+        "ours",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[
+            ("A", &[("Row", "A"), ("Name", "Alpha")]),
+            ("B", &[("Row", "B"), ("Name", "Beta local")]),
+        ],
+    );
+    let theirs = table(
+        "theirs",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[("A", &[("Row", "A"), ("Name", "Alpha")])],
+    );
+    let base_path = directory.join("base.xlsx");
+    let ours_path = directory.join("ours.xlsx");
+    let theirs_path = directory.join("theirs.xlsx");
+    write_model_workbook(&base_path, &base);
+    write_model_workbook(&ours_path, &ours);
+    write_model_workbook(&theirs_path, &theirs);
+
+    for (default, expected_rows) in [
+        (ConflictDefault::Theirs, 1usize),
+        (ConflictDefault::Ours, 2usize),
+    ] {
+        let result = merge_workbooks_with_conflict_default(
+            &base,
+            &ours,
+            &theirs,
+            MergeStrategy::Fail,
+            default,
+        );
+        assert_eq!(result.preview_rows[0].kind, "row_delete_conflict");
+        let review = directory.join(format!("delete-review-{}.xlsx", default.as_str()));
+        let output = directory.join(format!("delete-resolved-{}.xlsx", default.as_str()));
+        write_merge_review(&result, &review).unwrap();
+        apply_merge_review(
+            &review,
+            &base_path,
+            &ours_path,
+            &theirs_path,
+            MergeStrategy::Fail,
+            default,
+            &output,
+        )
+        .unwrap();
+        let resolved = table_core::model::read_workbook(&output).unwrap();
+        assert_eq!(resolved.sheet("#Data").unwrap().rows.len(), expected_rows);
+    }
+    let _ = std::fs::remove_dir_all(directory);
 }
 
 #[test]

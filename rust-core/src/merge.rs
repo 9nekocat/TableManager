@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
 use serde::Serialize;
@@ -25,6 +25,40 @@ impl MergeStrategy {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ConflictDefault {
+    Ours,
+    Theirs,
+    Empty,
+}
+
+impl ConflictDefault {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ours => "ours",
+            Self::Theirs => "theirs",
+            Self::Empty => "empty",
+        }
+    }
+}
+
+fn deletion_choice_to_keep(
+    strategy: MergeStrategy,
+    conflict_default: ConflictDefault,
+    missing_side: &str,
+) -> bool {
+    match strategy {
+        MergeStrategy::Ours => missing_side != "ours",
+        MergeStrategy::Theirs => missing_side != "theirs",
+        MergeStrategy::Fail => match conflict_default {
+            ConflictDefault::Ours => missing_side != "ours",
+            ConflictDefault::Theirs => missing_side != "theirs",
+            ConflictDefault::Empty => false,
+        },
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Branch {
     Base,
@@ -37,6 +71,7 @@ pub struct MergeChange {
     pub sheet: String,
     pub kind: String,
     pub row: String,
+    pub row_occurrence: usize,
     pub column: String,
     pub base: String,
     pub ours: String,
@@ -44,6 +79,21 @@ pub struct MergeChange {
     pub result: String,
     pub conflict: bool,
     pub note: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MergePreviewRow {
+    pub sheet: String,
+    pub row: String,
+    pub occurrence: usize,
+    pub kind: String,
+    pub base: Vec<Cell>,
+    pub ours: Vec<Cell>,
+    pub theirs: Vec<Cell>,
+    pub final_cells: Vec<Cell>,
+    pub conflict_columns: Vec<usize>,
+    pub default_decision: ConflictDefault,
+    pub default_keep: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -63,6 +113,8 @@ pub struct MergeResult {
     pub strategy: MergeStrategy,
     pub changes: Vec<MergeChange>,
     pub issues: Vec<Issue>,
+    #[serde(skip)]
+    pub preview_rows: Vec<MergePreviewRow>,
     #[serde(skip)]
     pub workbook: Workbook,
 }
@@ -207,13 +259,30 @@ pub fn merge_files(
     theirs_path: impl AsRef<Path>,
     strategy: MergeStrategy,
 ) -> Result<MergeResult> {
+    merge_files_with_conflict_default(
+        base_path,
+        ours_path,
+        theirs_path,
+        strategy,
+        ConflictDefault::Theirs,
+    )
+}
+
+pub fn merge_files_with_conflict_default(
+    base_path: impl AsRef<Path>,
+    ours_path: impl AsRef<Path>,
+    theirs_path: impl AsRef<Path>,
+    strategy: MergeStrategy,
+    conflict_default: ConflictDefault,
+) -> Result<MergeResult> {
     let mut base = read_workbook(base_path)?;
     let mut ours = read_workbook(ours_path)?;
     let mut theirs = read_workbook(theirs_path)?;
     base.add_validation_issues();
     ours.add_validation_issues();
     theirs.add_validation_issues();
-    let mut result = merge_workbooks(&base, &ours, &theirs, strategy);
+    let mut result =
+        merge_workbooks_with_conflict_default(&base, &ours, &theirs, strategy, conflict_default);
     result.workbook.add_validation_issues();
     Ok(result)
 }
@@ -223,6 +292,16 @@ pub fn merge_workbooks(
     ours: &Workbook,
     theirs: &Workbook,
     strategy: MergeStrategy,
+) -> MergeResult {
+    merge_workbooks_with_conflict_default(base, ours, theirs, strategy, ConflictDefault::Theirs)
+}
+
+pub fn merge_workbooks_with_conflict_default(
+    base: &Workbook,
+    ours: &Workbook,
+    theirs: &Workbook,
+    strategy: MergeStrategy,
+    conflict_default: ConflictDefault,
 ) -> MergeResult {
     let mut merged = Workbook {
         path: "merged".to_string(),
@@ -251,6 +330,7 @@ pub fn merge_workbooks(
             ours_sheet,
             theirs_sheet,
             strategy,
+            conflict_default,
             &mut changes,
         ) {
             merged.sheets.push(sheet);
@@ -259,15 +339,18 @@ pub fn merge_workbooks(
     let mut issues = base.issues.clone();
     issues.extend(ours.issues.clone());
     issues.extend(theirs.issues.clone());
-    MergeResult {
+    let mut result = MergeResult {
         base: base.path.clone(),
         ours: ours.path.clone(),
         theirs: theirs.path.clone(),
         strategy,
         changes,
         issues,
+        preview_rows: Vec::new(),
         workbook: merged,
-    }
+    };
+    result.preview_rows = build_preview_rows(base, ours, theirs, &result, conflict_default);
+    result
 }
 
 fn merge_sheet(
@@ -276,6 +359,7 @@ fn merge_sheet(
     ours: Option<&Sheet>,
     theirs: Option<&Sheet>,
     strategy: MergeStrategy,
+    conflict_default: ConflictDefault,
     changes: &mut Vec<MergeChange>,
 ) -> Option<Sheet> {
     match (base, ours, theirs) {
@@ -289,7 +373,13 @@ fn merge_sheet(
             Some(ours.clone())
         }
         (None, Some(ours), Some(theirs)) => Some(merge_existing_sheets(
-            name, None, ours, theirs, strategy, changes,
+            name,
+            None,
+            ours,
+            theirs,
+            strategy,
+            conflict_default,
+            changes,
         )),
         (None, None, Some(theirs)) => {
             changes.push(MergeChange {
@@ -316,14 +406,27 @@ fn merge_sheet(
             ours,
             theirs,
             strategy,
+            conflict_default,
             changes,
         )),
-        (Some(base), Some(present), None) => {
-            merge_sheet_delete(name, base, present, "theirs", strategy, changes)
-        }
-        (Some(base), None, Some(present)) => {
-            merge_sheet_delete(name, base, present, "ours", strategy, changes)
-        }
+        (Some(base), Some(present), None) => merge_sheet_delete(
+            name,
+            base,
+            present,
+            "theirs",
+            strategy,
+            conflict_default,
+            changes,
+        ),
+        (Some(base), None, Some(present)) => merge_sheet_delete(
+            name,
+            base,
+            present,
+            "ours",
+            strategy,
+            conflict_default,
+            changes,
+        ),
     }
 }
 
@@ -333,6 +436,7 @@ fn merge_sheet_delete(
     present: &Sheet,
     missing_side: &str,
     strategy: MergeStrategy,
+    conflict_default: ConflictDefault,
     changes: &mut Vec<MergeChange>,
 ) -> Option<Sheet> {
     if sheets_equal(base, present) {
@@ -344,11 +448,7 @@ fn merge_sheet_delete(
         });
         return None;
     }
-    let keep = match strategy {
-        MergeStrategy::Fail => true,
-        MergeStrategy::Ours => missing_side != "ours",
-        MergeStrategy::Theirs => missing_side != "theirs",
-    };
+    let keep = deletion_choice_to_keep(strategy, conflict_default, missing_side);
     changes.push(MergeChange {
         sheet: name.to_string(),
         kind: "sheet_delete_conflict".to_string(),
@@ -366,6 +466,7 @@ fn merge_existing_sheets(
     ours: &Sheet,
     theirs: &Sheet,
     strategy: MergeStrategy,
+    conflict_default: ConflictDefault,
     changes: &mut Vec<MergeChange>,
 ) -> Sheet {
     let empty_base;
@@ -379,8 +480,16 @@ fn merge_existing_sheets(
         };
         &empty_base
     };
-    let (plan, _columns) = merge_columns(base, ours, theirs, strategy, changes);
-    let rows = merge_rows(base, ours, theirs, &plan, strategy, changes);
+    let (plan, _columns) = merge_columns(base, ours, theirs, strategy, conflict_default, changes);
+    let rows = merge_rows(
+        base,
+        ours,
+        theirs,
+        &plan,
+        strategy,
+        conflict_default,
+        changes,
+    );
     Sheet {
         name: name.to_string(),
         headers: plan.headers,
@@ -452,6 +561,7 @@ fn merge_columns(
     ours: &Sheet,
     theirs: &Sheet,
     strategy: MergeStrategy,
+    conflict_default: ConflictDefault,
     changes: &mut Vec<MergeChange>,
 ) -> (ColumnPlan, Vec<OutputColumn>) {
     let (base_to_ours, _ours_used) = map_base_columns(&base.headers, &ours.headers);
@@ -502,11 +612,7 @@ fn merge_columns(
                 });
                 continue;
             }
-            let keep = match strategy {
-                MergeStrategy::Fail => true,
-                MergeStrategy::Ours => missing_side != "ours",
-                MergeStrategy::Theirs => missing_side != "theirs",
-            };
+            let keep = deletion_choice_to_keep(strategy, conflict_default, missing_side);
             let result_header = if missing_side == "ours" {
                 theirs_header.clone().unwrap_or_else(|| base_header.clone())
             } else {
@@ -516,6 +622,7 @@ fn merge_columns(
                 sheet: ours.name.clone(),
                 kind: "column_delete_conflict".to_string(),
                 row: String::new(),
+                row_occurrence: 0,
                 column: base_header.display_name(),
                 base: base_header.display_name(),
                 ours: ours_header
@@ -551,6 +658,7 @@ fn merge_columns(
             ours_header.as_ref().unwrap(),
             theirs_header.as_ref().unwrap(),
             strategy,
+            conflict_default,
             changes,
         );
         specs[base_index] = Some(OutputColumn {
@@ -609,11 +717,17 @@ fn merge_columns(
         {
             output[existing_index].theirs_index = Some(theirs_index);
             if output[existing_index].header.identity() != header.identity() {
-                let chosen = choose_header(strategy, &output[existing_index].header, header);
+                let chosen = choose_header(
+                    strategy,
+                    conflict_default,
+                    &output[existing_index].header,
+                    header,
+                );
                 changes.push(MergeChange {
                     sheet: ours.name.clone(),
                     kind: "column_header_conflict".to_string(),
                     row: String::new(),
+                    row_occurrence: 0,
                     column: header.display_name(),
                     base: String::new(),
                     ours: output[existing_index].header.display_name(),
@@ -664,10 +778,19 @@ fn merge_columns(
     )
 }
 
-fn choose_header(strategy: MergeStrategy, ours: &Header, theirs: &Header) -> Header {
+fn choose_header(
+    strategy: MergeStrategy,
+    conflict_default: ConflictDefault,
+    ours: &Header,
+    theirs: &Header,
+) -> Header {
     match strategy {
         MergeStrategy::Theirs => theirs.clone(),
-        MergeStrategy::Fail | MergeStrategy::Ours => ours.clone(),
+        MergeStrategy::Ours => ours.clone(),
+        MergeStrategy::Fail => match conflict_default {
+            ConflictDefault::Ours => ours.clone(),
+            ConflictDefault::Theirs | ConflictDefault::Empty => theirs.clone(),
+        },
     }
 }
 
@@ -677,6 +800,7 @@ fn merge_header(
     ours: &Header,
     theirs: &Header,
     strategy: MergeStrategy,
+    conflict_default: ConflictDefault,
     changes: &mut Vec<MergeChange>,
 ) -> Header {
     if ours.identity() == theirs.identity() {
@@ -688,11 +812,12 @@ fn merge_header(
     if theirs.identity() == base.identity() {
         return ours.clone();
     }
-    let chosen = choose_header(strategy, ours, theirs);
+    let chosen = choose_header(strategy, conflict_default, ours, theirs);
     changes.push(MergeChange {
         sheet: sheet.to_string(),
         kind: "column_header_conflict".to_string(),
         row: String::new(),
+        row_occurrence: 0,
         column: base.display_name(),
         base: base.display_name(),
         ours: ours.display_name(),
@@ -849,6 +974,7 @@ fn merge_rows(
     theirs: &Sheet,
     plan: &ColumnPlan,
     strategy: MergeStrategy,
+    conflict_default: ConflictDefault,
     changes: &mut Vec<MergeChange>,
 ) -> Vec<Row> {
     let base_rows = row_map(base);
@@ -906,6 +1032,7 @@ fn merge_rows(
                     ours,
                     plan,
                     strategy,
+                    conflict_default,
                     &identity,
                     changes,
                 );
@@ -928,6 +1055,7 @@ fn merge_rows(
                     ours,
                     plan,
                     strategy,
+                    conflict_default,
                     &identity,
                     changes,
                 );
@@ -945,15 +1073,12 @@ fn merge_rows(
                         ..MergeChange::default()
                     });
                 } else {
-                    let keep = match strategy {
-                        MergeStrategy::Fail => true,
-                        MergeStrategy::Ours => true,
-                        MergeStrategy::Theirs => false,
-                    };
+                    let keep = deletion_choice_to_keep(strategy, conflict_default, "theirs");
                     changes.push(MergeChange {
                         sheet: ours.name.clone(),
                         kind: "row_delete_conflict".to_string(),
                         row: identity.0.clone(),
+                        row_occurrence: identity.1,
                         result: if keep { "ours" } else { "deleted" }.to_string(),
                         conflict: true,
                         note: "仓库删除，但本地修改了该行".to_string(),
@@ -976,15 +1101,12 @@ fn merge_rows(
                         ..MergeChange::default()
                     });
                 } else {
-                    let keep = match strategy {
-                        MergeStrategy::Fail => true,
-                        MergeStrategy::Ours => false,
-                        MergeStrategy::Theirs => true,
-                    };
+                    let keep = deletion_choice_to_keep(strategy, conflict_default, "ours");
                     changes.push(MergeChange {
                         sheet: ours.name.clone(),
                         kind: "row_delete_conflict".to_string(),
                         row: identity.0.clone(),
+                        row_occurrence: identity.1,
                         result: if keep { "theirs" } else { "deleted" }.to_string(),
                         conflict: true,
                         note: "本地删除，但仓库修改了该行".to_string(),
@@ -1067,6 +1189,7 @@ fn merge_existing_rows(
     sheet: &Sheet,
     plan: &ColumnPlan,
     strategy: MergeStrategy,
+    conflict_default: ConflictDefault,
     identity: &(String, usize),
     changes: &mut Vec<MergeChange>,
 ) -> PlannedRow {
@@ -1088,6 +1211,7 @@ fn merge_existing_rows(
         let planned = merge_cell(
             &sheet.name,
             &identity.0,
+            identity.1,
             &plan.headers[output_index],
             &base_cell,
             ours_cell.as_ref(),
@@ -1096,6 +1220,7 @@ fn merge_existing_rows(
             ours.and_then(|row| row.source_row),
             theirs.and_then(|row| row.source_row),
             strategy,
+            conflict_default,
             changes,
         );
         cells.push(planned);
@@ -1111,6 +1236,7 @@ fn merge_existing_rows(
 fn merge_cell(
     sheet: &str,
     row_key: &str,
+    row_occurrence: usize,
     header: &Header,
     base: &Cell,
     ours: Option<&Cell>,
@@ -1119,6 +1245,7 @@ fn merge_cell(
     ours_row: Option<usize>,
     theirs_row: Option<usize>,
     strategy: MergeStrategy,
+    conflict_default: ConflictDefault,
     changes: &mut Vec<MergeChange>,
 ) -> Option<PlannedCell> {
     let empty = Cell::default();
@@ -1143,6 +1270,7 @@ fn merge_cell(
                 sheet: sheet.to_string(),
                 kind: "cell_modified".to_string(),
                 row: row_key.to_string(),
+                row_occurrence,
                 column: header.display_name(),
                 base: display_cell(base),
                 ours: display_cell(ours_cell),
@@ -1163,6 +1291,7 @@ fn merge_cell(
                 sheet: sheet.to_string(),
                 kind: "cell_modified".to_string(),
                 row: row_key.to_string(),
+                row_occurrence,
                 column: header.display_name(),
                 base: display_cell(base),
                 ours: display_cell(ours_cell),
@@ -1183,6 +1312,7 @@ fn merge_cell(
             sheet: sheet.to_string(),
             kind: "cell_modified".to_string(),
             row: row_key.to_string(),
+            row_occurrence,
             column: header.display_name(),
             base: display_cell(base),
             ours: display_cell(ours_cell),
@@ -1199,12 +1329,18 @@ fn merge_cell(
     }
     let chosen = match strategy {
         MergeStrategy::Theirs => (theirs_cell, Branch::Theirs, theirs_y, "theirs"),
-        MergeStrategy::Fail | MergeStrategy::Ours => (ours_cell, Branch::Ours, ours_y, "ours"),
+        MergeStrategy::Ours => (ours_cell, Branch::Ours, ours_y, "ours"),
+        MergeStrategy::Fail => match conflict_default {
+            ConflictDefault::Ours => (ours_cell, Branch::Ours, ours_y, "ours"),
+            ConflictDefault::Theirs => (theirs_cell, Branch::Theirs, theirs_y, "theirs"),
+            ConflictDefault::Empty => (&empty, Branch::Base, base_y, "empty"),
+        },
     };
     changes.push(MergeChange {
         sheet: sheet.to_string(),
         kind: "cell_conflict".to_string(),
         row: row_key.to_string(),
+        row_occurrence,
         column: header.display_name(),
         base: display_cell(base),
         ours: display_cell(ours_cell),
@@ -1292,6 +1428,118 @@ fn order_rows(
         }
     }
     order
+}
+
+fn build_preview_rows(
+    base: &Workbook,
+    ours: &Workbook,
+    theirs: &Workbook,
+    result: &MergeResult,
+    conflict_default: ConflictDefault,
+) -> Vec<MergePreviewRow> {
+    #[derive(Default)]
+    struct Group {
+        kind: String,
+        conflicts: Vec<MergeChange>,
+    }
+
+    let mut groups = BTreeMap::<(String, String, usize), Group>::new();
+    for change in result.conflicts() {
+        if !matches!(
+            change.kind.as_str(),
+            "cell_conflict" | "row_delete_conflict"
+        ) {
+            continue;
+        }
+        let key = (
+            change.sheet.clone(),
+            change.row.clone(),
+            change.row_occurrence,
+        );
+        let group = groups.entry(key).or_default();
+        if group.kind.is_empty() || change.kind == "row_delete_conflict" {
+            group.kind = change.kind.clone();
+        }
+        group.conflicts.push(change.clone());
+    }
+
+    groups
+        .into_iter()
+        .map(|((sheet_name, row_key, occurrence), group)| {
+            let target_headers = result
+                .workbook
+                .sheet(&sheet_name)
+                .map(|sheet| sheet.headers.as_slice())
+                .unwrap_or(&[]);
+            let base_sheet = base.sheet(&sheet_name);
+            let ours_sheet = ours.sheet(&sheet_name);
+            let theirs_sheet = theirs.sheet(&sheet_name);
+            let base_row = find_row(base_sheet, &row_key, occurrence);
+            let ours_row = find_row(ours_sheet, &row_key, occurrence);
+            let theirs_row = find_row(theirs_sheet, &row_key, occurrence);
+            let merged_sheet = result.workbook.sheet(&sheet_name);
+            let merged_row = find_row(merged_sheet, &row_key, occurrence);
+            let base_cells = align_row_cells(base_sheet, base_row, target_headers);
+            let ours_cells = align_row_cells(ours_sheet, ours_row, target_headers);
+            let theirs_cells = align_row_cells(theirs_sheet, theirs_row, target_headers);
+            let final_cells = merged_row.map(|row| row.cells.clone()).unwrap_or_else(|| {
+                if ours_row.is_some() {
+                    ours_cells.clone()
+                } else {
+                    theirs_cells.clone()
+                }
+            });
+            let conflict_columns = group
+                .conflicts
+                .iter()
+                .filter(|change| change.kind == "cell_conflict")
+                .filter_map(|change| {
+                    target_headers
+                        .iter()
+                        .position(|header| header.display_name() == change.column)
+                })
+                .collect::<Vec<_>>();
+            let default_keep = merged_row.is_some();
+            MergePreviewRow {
+                sheet: sheet_name,
+                row: row_key,
+                occurrence,
+                kind: group.kind,
+                base: base_cells,
+                ours: ours_cells,
+                theirs: theirs_cells,
+                final_cells,
+                conflict_columns,
+                default_decision: conflict_default,
+                default_keep,
+            }
+        })
+        .collect()
+}
+
+fn find_row<'a>(sheet: Option<&'a Sheet>, key: &str, occurrence: usize) -> Option<&'a Row> {
+    sheet?
+        .rows
+        .iter()
+        .find(|row| row.key == key && row.occurrence == occurrence)
+}
+
+fn align_row_cells(
+    source_sheet: Option<&Sheet>,
+    source_row: Option<&Row>,
+    target_headers: &[Header],
+) -> Vec<Cell> {
+    let mut cells = vec![Cell::default(); target_headers.len()];
+    let (Some(sheet), Some(row)) = (source_sheet, source_row) else {
+        return cells;
+    };
+    let (mapping, _) = map_base_columns(&sheet.headers, target_headers);
+    for (source_index, target_index) in mapping.into_iter().enumerate() {
+        if let Some(target_index) = target_index {
+            cells[target_index.0] = row.cells.get(source_index).cloned().unwrap_or_default();
+        }
+    }
+    cells
 }
 
 pub fn format_merge_text(result: &MergeResult) -> String {

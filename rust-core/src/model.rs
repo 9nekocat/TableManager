@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use calamine::{Data, Reader, Sheets, open_workbook_auto};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, Result};
 use crate::formula::analyze_formula;
@@ -97,7 +97,7 @@ impl Header {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Cell {
     pub value: String,
     pub formula: Option<String>,

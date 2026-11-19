@@ -5,9 +5,15 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use table_core::error::Result;
 use table_core::localization::DiffReportLabels;
-use table_core::merge::{MergeStrategy, format_merge_text, merge_files};
+use table_core::merge::{
+    ConflictDefault, MergeStrategy, format_merge_text, merge_files_with_conflict_default,
+};
+use table_core::merge_review::apply_merge_review;
 use table_core::model::read_workbook;
-use table_core::output::{DiffExcelLayout, write_diff_excel_with_layout, write_merge_excel};
+use table_core::output::{
+    DiffExcelLayout, write_diff_excel_with_layout, write_merge_excel, write_merge_review,
+    write_merged_workbook,
+};
 use table_core::svn_integration::install_svn_integration;
 use table_core::{diff_files, format_text_diff};
 
@@ -54,12 +60,31 @@ enum Command {
         theirs: PathBuf,
         #[arg(long, value_enum, default_value = "fail")]
         strategy: StrategyArg,
+        /// Preferred side for real conflicts. Defaults to the remote/their value.
+        #[arg(long, value_enum, default_value = "theirs")]
+        conflict_default: ConflictDefaultArg,
         #[arg(long)]
         output: Option<PathBuf>,
         #[arg(long, value_enum, default_value = "text")]
         report: ReportFormat,
         #[arg(long)]
         allow_conflicts: bool,
+        /// Write a review workbook here when real conflicts remain.
+        #[arg(long)]
+        review_output: Option<PathBuf>,
+    },
+    /// Apply the [最终] rows from a merge review workbook.
+    ResolveReview {
+        preview: PathBuf,
+        base: PathBuf,
+        ours: PathBuf,
+        theirs: PathBuf,
+        #[arg(long, value_enum, default_value = "fail")]
+        strategy: StrategyArg,
+        #[arg(long, value_enum, default_value = "theirs")]
+        conflict_default: ConflictDefaultArg,
+        #[arg(long)]
+        output: PathBuf,
     },
     /// Register this package as the Subversion diff and merge helper.
     InstallSvn {
@@ -112,6 +137,23 @@ impl From<StrategyArg> for MergeStrategy {
             StrategyArg::Fail => MergeStrategy::Fail,
             StrategyArg::Ours => MergeStrategy::Ours,
             StrategyArg::Theirs => MergeStrategy::Theirs,
+        }
+    }
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum ConflictDefaultArg {
+    Ours,
+    Theirs,
+    Empty,
+}
+
+impl From<ConflictDefaultArg> for ConflictDefault {
+    fn from(value: ConflictDefaultArg) -> Self {
+        match value {
+            ConflictDefaultArg::Ours => ConflictDefault::Ours,
+            ConflictDefaultArg::Theirs => ConflictDefault::Theirs,
+            ConflictDefaultArg::Empty => ConflictDefault::Empty,
         }
     }
 }
@@ -236,11 +278,20 @@ fn run(cli: Cli) -> Result<i32> {
             ours,
             theirs,
             strategy,
+            conflict_default,
             output,
             report,
             allow_conflicts,
+            review_output,
         } => {
-            let result = merge_files(&base, &ours, &theirs, strategy.into())?;
+            let conflict_default = ConflictDefault::from(conflict_default);
+            let result = merge_files_with_conflict_default(
+                &base,
+                &ours,
+                &theirs,
+                strategy.into(),
+                conflict_default,
+            )?;
             match report {
                 ReportFormat::Text => println!("{}", format_merge_text(&result)),
                 ReportFormat::Json => {
@@ -256,6 +307,17 @@ fn run(cli: Cli) -> Result<i32> {
                     );
                 }
             }
+            if let Some(review_output) = review_output {
+                if result.has_unresolved_conflicts() {
+                    write_merge_review(&result, &review_output)?;
+                    println!("{}", review_output.display());
+                    return Ok(2);
+                }
+                let output = output.unwrap_or_else(|| default_merge_path(&ours));
+                write_merged_workbook(&result, &output)?;
+                println!("{}", output.display());
+                return Ok(0);
+            }
             if result.has_unresolved_conflicts() && !allow_conflicts {
                 eprintln!(
                     "merge not written: {} unresolved conflicts",
@@ -267,6 +329,28 @@ fn run(cli: Cli) -> Result<i32> {
             write_merge_excel(&result, &output, true)?;
             println!("{}", output.display());
             Ok(if result.ok() { 0 } else { 2 })
+        }
+        Command::ResolveReview {
+            preview,
+            base,
+            ours,
+            theirs,
+            strategy,
+            conflict_default,
+            output,
+        } => {
+            let applied = apply_merge_review(
+                &preview,
+                &base,
+                &ours,
+                &theirs,
+                strategy.into(),
+                conflict_default.into(),
+                &output,
+            )?;
+            println!("resolved={applied}");
+            println!("{}", output.display());
+            Ok(0)
         }
         Command::InstallSvn { config, dry_run } => {
             let executable = std::env::current_exe()?;

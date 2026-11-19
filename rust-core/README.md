@@ -8,7 +8,9 @@ table-core.exe diff OLD NEW --format json
 table-core.exe diff OLD NEW --format excel --output diff.xlsx
 table-core.exe diff OLD NEW --format excel --layout compact --output diff.xlsx
 table-core.exe diff OLD NEW --format excel --output diff.xlsx --labels config\diff-report.zh-CN.json
-table-core.exe merge BASE OURS THEIRS --strategy fail --output merged.xlsx
+table-core.exe merge BASE OURS THEIRS --strategy fail --conflict-default theirs --output merged.xlsx
+table-core.exe merge BASE OURS THEIRS --strategy fail --conflict-default theirs --review-output review.xlsx
+table-core.exe resolve-review review.xlsx BASE OURS THEIRS --conflict-default theirs --output merged.xlsx
 configure-svn.bat
 table-core.exe install-svn --dry-run
 table-core.exe install-svn
@@ -27,7 +29,13 @@ table-core.exe install-svn
 - `configure-svn-管理员模式运行.bat` 是同一流程的管理员模式入口。
 - 发布包包含 `svn-diff-headless.cmd` 和 `svn-merge-headless.cmd`，不会打开 Excel。
 - 合并保留简单公式，并在行列变更后重绑定行内引用。
-- 默认冲突策略为 `fail`；未解决冲突返回退出码 `2`。
+- 默认冲突策略为 `fail`；真实冲突默认预填仓库值 `theirs`，可用
+  `--conflict-default ours|theirs|empty` 修改。
+- 合并预览按原表页签生成 `[基线]`、`[我的]`、`[仓库]`、`[最终]` 行；用户最终采用值放在
+  每条冲突记录最下方的 `[最终]` 行。
+- `resolve-review` 读取 `[最终]` 行并写出干净的业务工作簿，不会把预览页签带入正式表。
+- SVN 合并没有真实冲突时会自动写出结果并执行 `svn resolve --accept working`；有真实冲突时
+  打开预览，关闭 Excel 并在命令行确认后再写回和标记 resolved。
 - `--allow-conflicts` 写出 `_MergeConflicts`、`_MergeChanges` 和 `_MergeIssues` 审查页。
 - 复杂公式、重复表头、重复 RowName 和空行列会进入检查报告。
 

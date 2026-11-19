@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- 合并预览改为按原表页签组织 `[基线]`、`[我的]`、`[仓库]`、`[最终]` 行。
+- 新增冲突回写链路：`merge --review-output` 生成预览，`resolve-review` 应用
+  `[最终]` 行并输出干净的业务工作簿。
+- `svn-merge` 在无真实冲突时自动合并并执行 `svn resolve --accept working`。
+- 有真实冲突时等待用户关闭 Excel 并在命令窗口确认后写回、清理预览并标记 resolved。
+- 冲突默认值改为仓库侧 `theirs`，可通过 `merge_conflict_default` 配置为
+  `ours` 或 `empty`。
+
 ## 0.1.0 - 2026-11-18
 
 - 首个独立的 Rust Excel 比对与三路合并应用。

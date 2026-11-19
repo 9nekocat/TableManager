@@ -1,12 +1,12 @@
 use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
-use rust_xlsxwriter::{Color, Format, Workbook as XlsxWorkbook};
+use rust_xlsxwriter::{Color, DataValidation, Format, Workbook as XlsxWorkbook};
 
 use crate::diff::{DiffResult, RowChange, SheetDiff};
 use crate::error::Result;
 use crate::localization::DiffReportLabels;
-use crate::merge::MergeResult;
+use crate::merge::{ConflictDefault, MergePreviewRow, MergeResult};
 use crate::model::DATA_START_ROW;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -995,6 +995,373 @@ fn write_row(
         worksheet.write_string_with_format(row, column as u16, *value, format)?;
     }
     Ok(())
+}
+
+pub fn write_merged_workbook(result: &MergeResult, output_path: impl AsRef<Path>) -> Result<()> {
+    let mut workbook = XlsxWorkbook::new();
+    let header_format = Format::new()
+        .set_bold()
+        .set_font_color(Color::White)
+        .set_background_color("#4472C4");
+    let literal_formula_format = Format::new().set_quote_prefix().set_num_format("@");
+
+    for sheet in &result.workbook.sheets {
+        let worksheet = workbook.add_worksheet();
+        worksheet.set_name(&sheet.name)?;
+        for (column, header) in sheet.headers.iter().enumerate() {
+            for (row, value) in [&header.cn, &header.en, &header.type_name]
+                .into_iter()
+                .enumerate()
+            {
+                worksheet.write_string_with_format(
+                    row as u32,
+                    column as u16,
+                    value,
+                    &header_format,
+                )?;
+            }
+            worksheet.set_column_width(column as u16, 18)?;
+        }
+        for (row_offset, row) in sheet.rows.iter().enumerate() {
+            let output_row = (DATA_START_ROW - 1 + row_offset) as u32;
+            for (column, cell) in row.cells.iter().enumerate() {
+                if let Some(formula) = &cell.formula {
+                    let formula = if formula.starts_with('=') {
+                        formula.clone()
+                    } else {
+                        format!("={formula}")
+                    };
+                    worksheet.write_formula(output_row, column as u16, formula.as_str())?;
+                } else if column == 0 && cell.value.is_empty() && !row.key.is_empty() {
+                    write_typed_value(
+                        worksheet,
+                        output_row,
+                        0,
+                        &row.key,
+                        sheet.headers.first(),
+                        &literal_formula_format,
+                    )?;
+                } else if !cell.value.is_empty() {
+                    write_typed_value(
+                        worksheet,
+                        output_row,
+                        column as u16,
+                        &cell.value,
+                        sheet.headers.get(column),
+                        &literal_formula_format,
+                    )?;
+                }
+            }
+        }
+        if !sheet.headers.is_empty() {
+            worksheet.autofilter(
+                2,
+                0,
+                DATA_START_ROW as u32 - 1 + sheet.rows.len() as u32,
+                sheet.headers.len() as u16 - 1,
+            )?;
+        }
+    }
+    workbook.save(output_path)?;
+    Ok(())
+}
+
+pub fn write_merge_review(result: &MergeResult, output_path: impl AsRef<Path>) -> Result<()> {
+    let mut grouped = BTreeMap::<String, Vec<&MergePreviewRow>>::new();
+    for row in &result.preview_rows {
+        grouped.entry(row.sheet.clone()).or_default().push(row);
+    }
+
+    let mut workbook = XlsxWorkbook::new();
+    let header_format = Format::new()
+        .set_bold()
+        .set_font_color(Color::White)
+        .set_background_color("#4472C4");
+    let base_format = Format::new()
+        .set_background_color("#E7E6E6")
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let ours_format = Format::new()
+        .set_background_color("#FFF2CC")
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let theirs_format = Format::new()
+        .set_background_color("#FFF2CC")
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let final_format = Format::new()
+        .set_background_color("#E2F0D9")
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let conflict_format = Format::new()
+        .set_background_color("#FFC7CE")
+        .set_font_color("#9C0006")
+        .set_bold()
+        .set_text_wrap()
+        .set_align(rust_xlsxwriter::FormatAlign::Top);
+    let mut used_sheet_names = HashSet::new();
+    let mut metadata = Vec::<(String, String, MergePreviewRow, u32)>::new();
+
+    for (source_sheet, rows) in grouped {
+        let preview_sheet = unique_sheet_name(&source_sheet, &mut used_sheet_names);
+        let worksheet = workbook.add_worksheet();
+        worksheet.set_name(&preview_sheet)?;
+        let headers = result
+            .workbook
+            .sheet(&source_sheet)
+            .map(|sheet| sheet.headers.clone())
+            .unwrap_or_default();
+        worksheet.write_string_with_format(0, 0, "[标记]", &header_format)?;
+        worksheet.write_string_with_format(0, 1, "[处理方式]", &header_format)?;
+        worksheet.write_string_with_format(1, 0, "(EN)", &header_format)?;
+        worksheet.write_string_with_format(1, 1, "Decision", &header_format)?;
+        worksheet.write_string_with_format(2, 0, "(类型)", &header_format)?;
+        worksheet.write_string_with_format(2, 1, "", &header_format)?;
+        for (column, header) in headers.iter().enumerate() {
+            let excel_column = column as u16 + 2;
+            write_blank_or_string(worksheet, 0, excel_column, &header.cn, &header_format)?;
+            write_blank_or_string(worksheet, 1, excel_column, &header.en, &header_format)?;
+            write_blank_or_string(
+                worksheet,
+                2,
+                excel_column,
+                &header.type_name,
+                &header_format,
+            )?;
+            worksheet.set_column_width(excel_column, 22)?;
+        }
+        worksheet.set_column_width(0, 14)?;
+        worksheet.set_column_width(1, 16)?;
+        worksheet.set_freeze_panes(3, 2)?;
+
+        let mut output_row = DATA_START_ROW as u32 - 1;
+        for row in rows {
+            write_preview_values(
+                worksheet,
+                output_row,
+                "[基线]",
+                &row.base,
+                &base_format,
+                &[],
+                None,
+            )?;
+            write_preview_values(
+                worksheet,
+                output_row + 1,
+                "[我的]",
+                &row.ours,
+                &ours_format,
+                &[],
+                None,
+            )?;
+            write_preview_values(
+                worksheet,
+                output_row + 2,
+                "[仓库]",
+                &row.theirs,
+                &theirs_format,
+                &[],
+                None,
+            )?;
+            let final_row = output_row + 3;
+            write_preview_values(
+                worksheet,
+                final_row,
+                "[最终]",
+                &row.final_cells,
+                &final_format,
+                &row.conflict_columns,
+                Some(&conflict_format),
+            )?;
+            let decision = if row.kind == "row_delete_conflict" {
+                if row.default_keep {
+                    "[修改]"
+                } else {
+                    "[删除]"
+                }
+            } else {
+                match row.default_decision {
+                    ConflictDefault::Ours => "[我的]",
+                    ConflictDefault::Theirs => "[仓库]",
+                    ConflictDefault::Empty => "[空]",
+                }
+            };
+            worksheet.write_string_with_format(final_row, 1, decision, &conflict_format)?;
+            let choices = if row.kind == "row_delete_conflict" {
+                vec!["[修改]", "[删除]"]
+            } else {
+                vec!["[我的]", "[仓库]", "[空]", "[自定义]"]
+            };
+            let validation = DataValidation::new().allow_list_strings(&choices)?;
+            worksheet.add_data_validation(final_row, 1, final_row, 1, &validation)?;
+            worksheet.set_row_height(final_row, estimated_row_height_cells(&row.final_cells))?;
+            for offset in 0..3 {
+                let height = match offset {
+                    0 => estimated_row_height_cells(&row.base),
+                    1 => estimated_row_height_cells(&row.ours),
+                    _ => estimated_row_height_cells(&row.theirs),
+                };
+                worksheet.set_row_height(output_row + offset, height)?;
+            }
+            metadata.push((
+                preview_sheet.clone(),
+                source_sheet.clone(),
+                row.clone(),
+                final_row,
+            ));
+            output_row += 5;
+        }
+    }
+
+    if metadata.is_empty() {
+        let worksheet = workbook.add_worksheet();
+        worksheet.set_name("合并冲突")?;
+        worksheet.write_string(0, 0, "没有可预览的单元格或行冲突。")?;
+        worksheet.write_string(1, 0, "结构冲突已按配置的默认侧处理，请确认后再关闭。")?;
+    }
+
+    let structural = result
+        .conflicts()
+        .filter(|change| {
+            !matches!(
+                change.kind.as_str(),
+                "cell_conflict" | "row_delete_conflict"
+            )
+        })
+        .collect::<Vec<_>>();
+    if !structural.is_empty() {
+        let worksheet = workbook.add_worksheet();
+        worksheet.set_name("结构冲突")?;
+        for (column, header) in [
+            "Kind", "Sheet", "Row", "Column", "Base", "Ours", "Theirs", "Result", "Note",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            worksheet.write_string_with_format(0, column as u16, header, &header_format)?;
+        }
+        for (index, change) in structural.iter().enumerate() {
+            let row = index as u32 + 1;
+            write_row(
+                worksheet,
+                row,
+                &[
+                    &change.kind,
+                    &change.sheet,
+                    &change.row,
+                    &change.column,
+                    &change.base,
+                    &change.ours,
+                    &change.theirs,
+                    &change.result,
+                    &change.note,
+                ],
+                &conflict_format,
+            )?;
+        }
+        worksheet.set_column_width(0, 24)?;
+        worksheet.set_column_width(1, 18)?;
+        worksheet.set_column_width(8, 60)?;
+    }
+
+    let meta = workbook.add_worksheet();
+    meta.set_name("_MergeMeta")?;
+    meta.set_hidden(true);
+    for (column, header) in [
+        "kind",
+        "preview_sheet",
+        "source_sheet",
+        "row",
+        "occurrence",
+        "preview_row",
+        "conflict_columns",
+        "original_final",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        meta.write_string_with_format(0, column as u16, header, &header_format)?;
+    }
+    for (index, (preview_sheet, source_sheet, row, final_row)) in metadata.iter().enumerate() {
+        let excel_row = index as u32 + 1;
+        meta.write_string(excel_row, 0, &row.kind)?;
+        meta.write_string(excel_row, 1, preview_sheet)?;
+        meta.write_string(excel_row, 2, source_sheet)?;
+        meta.write_string(excel_row, 3, &row.row)?;
+        meta.write_number(excel_row, 4, row.occurrence as f64)?;
+        meta.write_number(excel_row, 5, *final_row as f64)?;
+        meta.write_string(
+            excel_row,
+            6,
+            row.conflict_columns
+                .iter()
+                .map(usize::to_string)
+                .collect::<Vec<_>>()
+                .join(","),
+        )?;
+        meta.write_string(
+            excel_row,
+            7,
+            &serde_json::to_string(&preview_display_cells(&row.final_cells))?,
+        )?;
+    }
+    workbook.save(output_path)?;
+    Ok(())
+}
+
+fn write_preview_values(
+    worksheet: &mut rust_xlsxwriter::Worksheet,
+    row: u32,
+    label: &str,
+    cells: &[crate::model::Cell],
+    format: &Format,
+    conflict_columns: &[usize],
+    conflict_format: Option<&Format>,
+) -> Result<()> {
+    worksheet.write_string_with_format(row, 0, label, format)?;
+    worksheet.write_string_with_format(row, 1, "", format)?;
+    for (column, cell) in cells.iter().enumerate() {
+        let cell_format = conflict_columns
+            .contains(&column)
+            .then_some(conflict_format)
+            .flatten()
+            .unwrap_or(format);
+        let display = match (cell.formula.as_deref(), cell.value.is_empty()) {
+            (Some(formula), false) => format!("={formula} -> {}", cell.value),
+            (Some(formula), true) => format!("={formula}"),
+            (None, _) => cell.value.clone(),
+        };
+        write_blank_or_string(worksheet, row, column as u16 + 2, &display, cell_format)?;
+    }
+    Ok(())
+}
+
+fn estimated_row_height_cells(cells: &[crate::model::Cell]) -> f64 {
+    cells
+        .iter()
+        .map(|cell| {
+            let pieces = if cell.value.is_empty() {
+                1
+            } else {
+                cell.value.lines().count()
+            };
+            15.0 * pieces as f64
+        })
+        .fold(18.0, f64::max)
+}
+
+fn preview_display_cells(cells: &[crate::model::Cell]) -> Vec<crate::model::Cell> {
+    cells
+        .iter()
+        .map(|cell| crate::model::Cell {
+            value: match (cell.formula.as_deref(), cell.value.is_empty()) {
+                (Some(formula), false) => format!("={formula} -> {}", cell.value),
+                (Some(formula), true) => format!("={formula}"),
+                (None, _) => cell.value.clone(),
+            },
+            formula: None,
+        })
+        .collect()
 }
 
 pub fn write_merge_excel(
