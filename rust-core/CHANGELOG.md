@@ -7,6 +7,7 @@
   `[最终]` 行并输出干净的业务工作簿。
 - `svn-merge` 在无真实冲突时自动合并并执行 `svn resolve --accept working`。
 - 有真实冲突时等待用户关闭 Excel 并在命令窗口确认后写回、清理预览并标记 resolved。
+- 非无头模式在合并完成或取消后显示 15 秒提示框，避免命令窗口自动关闭导致用户看不到结果。
 - 冲突默认值改为仓库侧 `theirs`，可通过 `merge_conflict_default` 配置为
   `ours` 或 `empty`。
 

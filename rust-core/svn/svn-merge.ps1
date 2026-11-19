@@ -157,6 +157,30 @@ function Open-ReviewFileAndWait {
     }
 }
 
+function Show-MergeTip {
+    param(
+        [string] $Message,
+        [ValidateSet("Information", "Warning")]
+        [string] $Kind = "Information"
+    )
+
+    if (
+        $Headless -or
+        $env:TM_SVN_NO_OPEN -eq "1" -or
+        $env:TM_SVN_NO_TIP -eq "1"
+    ) {
+        return
+    }
+    $icon = if ($Kind -eq "Warning") { 48 } else { 64 }
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        [void] $shell.Popup($Message, 15, "TableManager", $icon)
+    }
+    catch {
+        Write-Host $Message -ForegroundColor Yellow
+    }
+}
+
 function Complete-SvnResolution {
     param(
         [string] $MergedPath,
@@ -260,6 +284,11 @@ if ($exitCode -eq 0) {
     Write-Host "[TableManager] No real conflicts found; merged automatically." -ForegroundColor Green
     Complete-SvnResolution $mergedPath $workingPath
     Write-Host "[TableManager] Merge completed." -ForegroundColor Green
+    Show-MergeTip (
+        "Merge completed successfully.`n" +
+        "No real conflicts were found.`n" +
+        "SVN has been marked resolved."
+    )
     exit 0
 }
 
@@ -285,6 +314,10 @@ Write-Host "Confirm the [final] rows in Excel, save, and close Excel." -Foregrou
 $answer = Read-Host "Enter Y to apply the final values and mark resolved; anything else cancels"
 if ($answer -notmatch "^\s*(y|yes)\s*$") {
     Write-Host "[TableManager] Cancelled; the file remains conflicted in SVN." -ForegroundColor Yellow
+    Show-MergeTip (
+        "Merge was not applied.`n" +
+        "The file remains conflicted in SVN."
+    ) -Kind Warning
     exit 2
 }
 
@@ -304,4 +337,8 @@ if (Test-Path -LiteralPath $reviewPath -PathType Leaf) {
     Remove-Item -LiteralPath $reviewPath -Force
 }
 Write-Host "[TableManager] Applied the reviewed values and completed the merge." -ForegroundColor Green
+Show-MergeTip (
+    "Reviewed merge completed successfully.`n" +
+    "The final values were written and SVN has been marked resolved."
+)
 exit 0

@@ -36,6 +36,8 @@ table-core.exe install-svn
 - `resolve-review` 读取 `[最终]` 行并写出干净的业务工作簿，不会把预览页签带入正式表。
 - SVN 合并没有真实冲突时会自动写出结果并执行 `svn resolve --accept working`；有真实冲突时
   打开预览，关闭 Excel 并在命令行确认后再写回和标记 resolved。
+- 非无头模式在合并完成或取消后会显示 TableManager 提示框，避免命令窗口自动关闭后
+  用户看不到结果；`TM_SVN_NO_TIP=1` 可关闭提示框。
 - `--allow-conflicts` 写出 `_MergeConflicts`、`_MergeChanges` 和 `_MergeIssues` 审查页。
 - 复杂公式、重复表头、重复 RowName 和空行列会进入检查报告。
 

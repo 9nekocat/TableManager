@@ -56,6 +56,8 @@ Merge: "C:\Tools\table-core\svn\svn-merge.cmd" %merged %theirs %mine %base
   `[最终]` 排列。`[最终]` 行位于每组最下方，并预填配置指定的默认侧。
 - 预览关闭后，命令窗口会要求用户输入 `Y` 确认，再读取 `[最终]` 行写回，
   最后执行 `svn resolve --accept working`。
+- 非无头模式会在合并完成或取消后显示一个 15 秒的 TableManager 提示框，
+  避免从 TortoiseSVN 启动时命令窗口一闪而过。
 - 单元格冲突默认使用仓库值 `theirs`；可在 `svn-wrapper.json` 的
   `merge_conflict_default` 中改为 `ours` 或 `empty`。
 - `_MergeMeta` 是隐藏回写元数据页；正式业务工作簿不会包含任何 `_Merge*` 或预览页签。
@@ -77,6 +79,7 @@ TM_SVN_OUTPUT        指定 diff 输出文件，主要用于自动化测试
 TM_SVN_OUTPUT_DIR    指定 diff 输出目录；默认使用工作文件旁边的 .temp
 TM_SVN_CONFIG        指定包装器配置文件；默认使用用户级 config\svn-wrapper.json
 TM_SVN_MERGE_REVIEW  指定冲突预览文件路径，主要用于自动化测试
+TM_SVN_NO_TIP=1      不显示合并结束提示框
 ```
 
 发布包中的 `config\svn-wrapper.json` 是默认模板。实际记忆路径为：
