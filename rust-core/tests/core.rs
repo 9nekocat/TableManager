@@ -989,6 +989,54 @@ fn empty_conflict_default_does_not_delete_a_sheet_modified_by_theirs() {
 }
 
 #[test]
+fn merge_review_surfaces_structural_conflicts_before_confirmation() {
+    let base = table(
+        "base",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[("A", &[("Row", "A"), ("Name", "Base")])],
+    );
+    let ours = table(
+        "ours",
+        &[("行名", "Row", "FString"), ("名称", "Name", "FString")],
+        &[("A", &[("Row", "A"), ("Name", "Local")])],
+    );
+    let theirs = Workbook {
+        path: "theirs".to_string(),
+        sheets: Vec::new(),
+        issues: Vec::new(),
+    };
+    let result = merge_workbooks_with_conflict_default(
+        &base,
+        &ours,
+        &theirs,
+        MergeStrategy::Fail,
+        ConflictDefault::Theirs,
+    );
+    assert!(result.preview_rows.is_empty());
+
+    let path = std::env::current_dir()
+        .unwrap()
+        .join("target")
+        .join(format!(
+            "table-core-structural-review-{}-{}.xlsx",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+    write_merge_review(&result, &path).unwrap();
+    let mut workbook = open_workbook_auto(&path).unwrap();
+    let names = workbook.sheet_names();
+    assert!(names.contains(&"合并冲突".to_string()));
+    assert!(names.contains(&"结构冲突".to_string()));
+    let structural = workbook.worksheet_range("结构冲突").unwrap();
+    assert_eq!(cell_text(&structural, 1, 0), "sheet_delete_conflict");
+    assert_eq!(cell_text(&structural, 1, 7), "deleted");
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
 fn merge_review_uses_three_way_rows_and_theirs_default() {
     let base = table(
         "base",
