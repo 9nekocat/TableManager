@@ -24,8 +24,8 @@ table-core.exe install-svn
 - `--layout compact` 可选择原有的紧凑单页样式。
 - 排列模式会合并同类空行问题；错误级问题和其他重要问题逐条说明。
 - 报告辅助文案由 `DiffReportLabels` 本地化配置控制，JSON 可只覆盖需要修改的字段。
-- `install-svn` 会把当前用户的 Subversion `diff-cmd` / `merge-tool-cmd` 指向发布包自身。
-- `configure-svn.bat` 是一键注册入口，同时配置 Subversion 命令行和 TortoiseSVN；双击或在当前目录运行即可。
+- `install-svn` 只注册 TortoiseSVN 的 `.xlsx`、`.xlsm`、`.xlsb`、`.xls` 比对与合并规则。
+- `configure-svn.bat` 是一键注册入口，可以双击或在当前目录运行。
 - `configure-svn-管理员模式运行.bat` 是同一流程的管理员模式入口。
 - 发布包包含 `svn-diff-headless.cmd` 和 `svn-merge-headless.cmd`，不会打开 Excel。
 - 合并保留简单公式，并在行列变更后重绑定行内引用。

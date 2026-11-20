@@ -24,18 +24,8 @@ if not exist "svn\svn-merge.cmd" (
     exit /b 2
 )
 
-echo Configuring Subversion command-line integration...
+echo Registering Excel diff and merge tools in TortoiseSVN...
 "%~dp0table-core.exe" install-svn
-set "EXIT_CODE=%errorlevel%"
-
-if not "%EXIT_CODE%"=="0" (
-    echo [ERROR] Subversion configuration failed with exit code %EXIT_CODE%.
-    if "%QUIET%"=="0" pause
-    exit /b %EXIT_CODE%
-)
-
-echo Configuring TortoiseSVN integration...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0svn\configure-tortoisesvn.ps1" -RootDirectory "%~dp0."
 set "EXIT_CODE=%errorlevel%"
 
 if not "%EXIT_CODE%"=="0" (
@@ -45,6 +35,6 @@ if not "%EXIT_CODE%"=="0" (
 )
 
 echo.
-echo Subversion and TortoiseSVN configuration completed.
+echo TortoiseSVN Excel configuration completed.
 if "%QUIET%"=="0" pause
 exit /b 0

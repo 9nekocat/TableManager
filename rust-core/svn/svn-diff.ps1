@@ -180,13 +180,6 @@ function Open-ReviewFile {
     }
 }
 
-function Invoke-SvnInternalDiff {
-    param([string] $OldPath, [string] $NewPath)
-
-    & svn diff --internal-diff --old $OldPath --new $NewPath
-    exit $LASTEXITCODE
-}
-
 if ($SvnArgs.Count -lt 2) {
     [Console]::Error.WriteLine("SVN diff requires two file paths.")
     exit 2
@@ -195,7 +188,10 @@ if ($SvnArgs.Count -lt 2) {
 $oldPath = [IO.Path]::GetFullPath($SvnArgs[-2])
 $newPath = [IO.Path]::GetFullPath($SvnArgs[-1])
 if (!(Test-ExcelWorkbook $oldPath) -or !(Test-ExcelWorkbook $newPath)) {
-    Invoke-SvnInternalDiff $oldPath $newPath
+    [Console]::Error.WriteLine(
+        "TableManager diff only handles Excel workbook families: .xlsx, .xlsm, .xlsb and .xls."
+    )
+    exit 2
 }
 
 $tableCore = Get-TableCorePath

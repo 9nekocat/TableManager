@@ -25,4 +25,4 @@ pub use merge_review::apply_merge_review;
 pub use model::{Cell, Header, Issue, Row, Sheet, Workbook};
 pub use output::{DiffExcelLayout, write_merge_review, write_merged_workbook};
 pub use snapshot::{TextRow, TextSheet, TextWorkbook, workbook_to_text};
-pub use svn_integration::{SvnInstallResult, install_svn_integration};
+pub use svn_integration::install_svn_integration;

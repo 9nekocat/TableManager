@@ -1,20 +1,13 @@
 # SVN Excel 比对与三路合并
 
-包装脚本把 Subversion 和 TortoiseSVN 接到 Rust `table-core`。`.xlsx`、`.xlsm`、
-`.xlsb`、`.xls` 全部由 TableManager 自身完成表级比对与三路合并；普通文本文件仍可
-使用 Subversion 内建 diff（`svn diff --internal-diff`）。
+包装脚本用 Rust `table-core` 对 `.xlsx`、`.xlsm`、`.xlsb`、`.xls` 进行表级比对与三路合并。
 
 以下命令以发布包解压到 `C:\Tools\table-core` 为例。
 
-## Subversion 命令行
+## TortoiseSVN 注册
 
-首选自动注册。根目录的 `configure-svn.bat` 会同时配置：
-
-- 当前用户的 Subversion `diff-cmd` / `merge-tool-cmd`；
-- TortoiseSVN 的 `.xlsx`、`.xlsm`、`.xlsb`、`.xls` DiffTools 和 MergeTools。
-
-Subversion 配置会保留 `config.table-core.bak`；TortoiseSVN 注册表会备份到
-`%LOCALAPPDATA%\CatsInTheShell\TableManager\backup`。
+根目录的 `configure-svn.bat` 通过 `table-core.exe install-svn` 注册四种 Excel 扩展名。
+注册表备份位于 `%LOCALAPPDATA%\CatsInTheShell\TableManager\backup`。
 
 ```powershell
 .\configure-svn.bat
@@ -24,24 +17,8 @@ C:\Tools\table-core\table-core.exe install-svn --dry-run
 C:\Tools\table-core\table-core.exe install-svn
 ```
 
-`table-core.exe install-svn` 只修改 Subversion 命令行配置；需要同时配置 TortoiseSVN 时，
-使用根目录的一键 BAT。
-
-编辑 `%APPDATA%\Subversion\config`：
-
-```ini
-[helpers]
-diff-cmd = C:/Tools/table-core/svn/svn-diff.cmd
-diff-extensions =
-merge-tool-cmd = C:/Tools/table-core/svn/svn-merge.cmd
-
-[miscellany]
-diff-ignore-content-type = yes
-```
-
-## TortoiseSVN
-
-在 **Settings > Diff Viewer > Advanced** 和 **Settings > Merge Tool > Advanced** 中配置 `.xlsx`、`.xlsm`、`.xlsb`、`.xls`：
+手动注册可以在 **Settings > Diff Viewer > Advanced** 和 **Settings > Merge Tool > Advanced**
+为这四种扩展名指定以下命令。
 
 ```text
 Diff:  "C:\Tools\table-core\svn\svn-diff.cmd" %base %mine
@@ -68,14 +45,13 @@ Merge: "C:\Tools\table-core\svn\svn-merge.cmd" %merged %theirs %mine %base
 ## 无头模式
 
 `svn-diff-headless.cmd` 和 `svn-merge-headless.cmd` 设置 `TM_SVN_HEADLESS=1`。
-xlsx 族仍生成 TableManager 报告；普通文本 diff 直接输出 Subversion 内建文本 diff，
-不会启动 Excel 或 xlCompare。
+在命令行中，可直接调用这两个包装器来生成表格报告。包装器遇到不受支持的文件类型会返回退出码 `2`。
 
 环境变量：
 
 ```text
 TABLE_CORE_EXE       指定 table-core.exe 路径
-TABLE_CORE_SVN_DIR   指定包含 svn-diff.cmd / svn-merge.cmd 的目录
+TABLE_CORE_SVN_DIR   指定包含 configure-tortoisesvn.ps1 及包装脚本的目录
 TM_SVN_NO_OPEN=1     只生成文件，不打开 Excel
 TM_SVN_HEADLESS=1    无头模式；不打开 Excel，也不回退到外部工具
 TM_SVN_OUTPUT        指定 diff 输出文件，主要用于自动化测试

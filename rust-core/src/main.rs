@@ -86,11 +86,8 @@ enum Command {
         #[arg(long)]
         output: PathBuf,
     },
-    /// Register this package as the Subversion diff and merge helper.
+    /// Register the Excel diff and merge tools in TortoiseSVN.
     InstallSvn {
-        /// Override the Subversion user config file.
-        #[arg(long)]
-        config: Option<PathBuf>,
         #[arg(long)]
         dry_run: bool,
     },
@@ -352,21 +349,9 @@ fn run(cli: Cli) -> Result<i32> {
             println!("{}", output.display());
             Ok(0)
         }
-        Command::InstallSvn { config, dry_run } => {
+        Command::InstallSvn { dry_run } => {
             let executable = std::env::current_exe()?;
-            let result = install_svn_integration(executable, config.as_deref(), dry_run)?;
-            if result.dry_run {
-                println!("SVN 配置路径: {}", result.config_path);
-                println!("diff-cmd: {}", result.diff_cmd);
-                println!("merge-tool-cmd: {}", result.merge_tool_cmd);
-                println!("仅预览，未写入配置。");
-            } else if result.changed {
-                println!("已注册 TableManager SVN 集成: {}", result.config_path);
-                println!("diff-cmd: {}", result.diff_cmd);
-                println!("merge-tool-cmd: {}", result.merge_tool_cmd);
-            } else {
-                println!("SVN 集成已指向当前 TableManager: {}", result.config_path);
-            }
+            install_svn_integration(executable, dry_run)?;
             Ok(0)
         }
     }

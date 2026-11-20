@@ -438,7 +438,32 @@ fn svn_headless_wrappers_generate_diff_and_merge_files() {
 
 #[cfg(windows)]
 #[test]
-fn svn_headless_diff_uses_internal_diff_for_text_files() {
+fn svn_install_previews_only_excel_extension_mappings() {
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_table-core"))
+        .args(["install-svn", "--dry-run"])
+        .env_remove("TABLE_CORE_SVN_DIR")
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "{output:?}");
+    assert!(stdout.contains("TortoiseSVN DiffTools:"), "{stdout}");
+    assert!(stdout.contains("TortoiseSVN MergeTools:"), "{stdout}");
+    let extensions: Vec<_> = stdout
+        .lines()
+        .filter_map(|line| line.trim().split_once(" = ").map(|(name, _)| name))
+        .collect();
+    assert_eq!(
+        extensions,
+        [
+            ".xlsx", ".xlsm", ".xlsb", ".xls", ".xlsx", ".xlsm", ".xlsb", ".xls"
+        ]
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn svn_workbook_wrappers_reject_text_files() {
     let directory = std::env::current_dir()
         .unwrap()
         .join("target")
@@ -456,24 +481,34 @@ fn svn_headless_diff_uses_internal_diff_for_text_files() {
     std::fs::write(&old_path, "old value\n").unwrap();
     std::fs::write(&new_path, "new value\n").unwrap();
 
-    let output = std::process::Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            concat!(env!("CARGO_MANIFEST_DIR"), "\\svn\\svn-diff.ps1"),
-        ])
-        .arg(&old_path)
-        .arg(&new_path)
-        .env("TM_SVN_HEADLESS", "1")
-        .output()
-        .unwrap();
+    let svn_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("svn");
+    for headless in ["0", "1"] {
+        let output = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(svn_dir.join("svn-diff.ps1"))
+            .args([&old_path, &new_path])
+            .env("TM_SVN_HEADLESS", headless)
+            .output()
+            .unwrap();
 
-    assert_eq!(output.status.code(), Some(0));
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("-old value"));
-    assert!(stdout.contains("+new value"));
+        assert_eq!(output.status.code(), Some(2), "{output:?}");
+        assert!(String::from_utf8_lossy(&output.stderr).contains("only handles Excel"));
+
+        let merged_path = directory.join("merged.txt");
+        let output = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(svn_dir.join("svn-merge.ps1"))
+            .args([&merged_path, &old_path, &new_path, &old_path])
+            .env("TM_SVN_HEADLESS", headless)
+            .env("TM_SVN_NO_TIP", "1")
+            .env("LOCALAPPDATA", &directory)
+            .output()
+            .unwrap();
+
+        assert_eq!(output.status.code(), Some(2), "{output:?}");
+        assert!(String::from_utf8_lossy(&output.stdout).contains("only handles Excel"));
+        assert!(!merged_path.exists());
+    }
     let _ = std::fs::remove_dir_all(directory);
 }
 

@@ -1,5 +1,4 @@
 param(
-    [Parameter(Mandatory = $true)]
     [string] $RootDirectory,
     [switch] $DryRun,
     [switch] $Quiet
@@ -7,9 +6,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$root = (Resolve-Path -LiteralPath $RootDirectory).Path
-$diffCmd = Join-Path $root "svn\svn-diff.cmd"
-$mergeCmd = Join-Path $root "svn\svn-merge.cmd"
+$wrapperDirectory = if ($RootDirectory) {
+    Join-Path (Resolve-Path -LiteralPath $RootDirectory).Path "svn"
+}
+else {
+    $PSScriptRoot
+}
+$diffCmd = Join-Path $wrapperDirectory "svn-diff.cmd"
+$mergeCmd = Join-Path $wrapperDirectory "svn-merge.cmd"
 foreach ($required in @($diffCmd, $mergeCmd)) {
     if (!(Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Missing TableManager SVN wrapper: $required"
@@ -61,8 +65,11 @@ foreach ($item in @(
     }
 }
 
-New-Item -Path $diffKey -Force | Out-Null
-New-Item -Path $mergeKey -Force | Out-Null
+foreach ($key in @($diffKey, $mergeKey)) {
+    if (!(Test-Path -LiteralPath $key)) {
+        New-Item -Path $key | Out-Null
+    }
+}
 foreach ($extension in $extensions) {
     New-ItemProperty -Path $diffKey -Name $extension -Value $diffValue -PropertyType String -Force | Out-Null
     New-ItemProperty -Path $mergeKey -Name $extension -Value $mergeValue -PropertyType String -Force | Out-Null

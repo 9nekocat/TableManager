@@ -150,16 +150,16 @@ Test-Path rust-core/dist
 
 一键配置脚本的源码位于 `rust-core/configure-svn.bat`，管理员入口源码位于
 `rust-core/configure-svn-管理员模式运行.bat`。发布时两个 BAT 都复制到根目录；
-管理员入口必须委托普通入口，避免出现两套配置逻辑。普通入口必须同时执行：
+管理员入口必须委托普通入口。普通入口执行：
 
 ```text
 table-core.exe install-svn
-svn/configure-tortoisesvn.ps1
 ```
 
-这两步分别把当前用户 Subversion 和 TortoiseSVN 的 xlsx 族 diff/merge 指向当前导出版。
-Subversion 修改前保留 `config.table-core.bak`；TortoiseSVN 注册表备份到
-`%LOCALAPPDATA%\CatsInTheShell\TableManager\backup`。无头调用使用：
+该命令调用 `svn/configure-tortoisesvn.ps1`，仅注册当前用户 TortoiseSVN 的
+`.xlsx`、`.xlsm`、`.xlsb`、`.xls` 比对与合并规则。保留已有的其他扩展名规则和
+Subversion 全局配置。TortoiseSVN 注册表备份到
+`%LOCALAPPDATA%\CatsInTheShell\TableManager\backup`。
 
 SVN diff 输出目录由用户级
 `%LOCALAPPDATA%\CatsInTheShell\TableManager\config\svn-wrapper.json` 管理，并以发布包中的

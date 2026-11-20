@@ -225,25 +225,6 @@ function Complete-SvnResolution {
     Write-Host "[TableManager] Marked SVN resolved: $target" -ForegroundColor Green
 }
 
-function Invoke-XlCompareMerge {
-    param(
-        [string] $BasePath,
-        [string] $TheirPath,
-        [string] $MinePath,
-        [string] $MergedPath
-    )
-
-    $xlCompare = Join-Path $env:LOCALAPPDATA "Spreadsheet Tools\xlCompare\xlCompare.exe"
-    if (!(Test-Path -LiteralPath $xlCompare -PathType Leaf)) {
-        throw "Neither an Excel workbook nor xlCompare was found."
-    }
-    & $xlCompare -merge -titleMine:WORKING -titleBase:BASE -titleTheir:THEIRS `
-        $MinePath $BasePath $TheirPath -output:$MergedPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "xlCompare merge failed with exit code $LASTEXITCODE"
-    }
-}
-
 trap {
     $message = "TableManager merge failed.`n$($_.Exception.Message)"
     Write-Host "[TableManager] $($_.Exception.Message)" -ForegroundColor Red
@@ -276,10 +257,7 @@ if (
     !(Test-ExcelWorkbook $theirPath) -or
     !(Test-ExcelWorkbook $minePath)
 ) {
-    if ($Headless) {
-        throw "Headless mode only handles Excel workbook families: .xlsx, .xlsm, .xlsb and .xls."
-    }
-    Invoke-XlCompareMerge $basePath $theirPath $minePath $mergedPath
+    throw "TableManager merge only handles Excel workbook families: .xlsx, .xlsm, .xlsb and .xls."
 }
 
 $tableCore = Get-TableCorePath

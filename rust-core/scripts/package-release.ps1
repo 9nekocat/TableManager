@@ -65,16 +65,9 @@ Copy-Item -Path (Join-Path $coreRoot "svn\*") `
 if ($LASTEXITCODE -ne 0) {
     throw "Packaged table-core.exe failed its smoke test"
 }
-& (Join-Path $stage "table-core.exe") install-svn --dry-run `
-    --config (Join-Path $stage "config\svn-config-preview.ini")
+& (Join-Path $stage "table-core.exe") install-svn --dry-run
 if ($LASTEXITCODE -ne 0) {
     throw "Packaged SVN self-registration failed its smoke test"
-}
-& powershell.exe -NoProfile -ExecutionPolicy Bypass `
-    -File (Join-Path $stage "svn\configure-tortoisesvn.ps1") `
-    -RootDirectory $stage -DryRun
-if ($LASTEXITCODE -ne 0) {
-    throw "Packaged TortoiseSVN configuration script failed its smoke test"
 }
 foreach ($required in @(
     (Join-Path $stage "svn\svn-diff.cmd"),
