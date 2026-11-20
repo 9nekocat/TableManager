@@ -6,7 +6,7 @@
 
 ## TortoiseSVN 注册
 
-根目录的 `configure-svn.bat` 通过 `table-core.exe install-svn` 注册四种 Excel 扩展名。
+根目录的 `configure-svn.bat` 和 `table-core.exe install-svn` 都可以注册四种 Excel 扩展名。
 注册表备份位于 `%LOCALAPPDATA%\CatsInTheShell\TableManager\backup`。
 
 ```powershell

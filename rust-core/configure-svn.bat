@@ -25,7 +25,7 @@ if not exist "svn\svn-merge.cmd" (
 )
 
 echo Registering Excel diff and merge tools in TortoiseSVN...
-"%~dp0table-core.exe" install-svn
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0svn\configure-tortoisesvn.ps1"
 set "EXIT_CODE=%errorlevel%"
 
 if not "%EXIT_CODE%"=="0" (
