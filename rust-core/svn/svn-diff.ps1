@@ -180,14 +180,10 @@ function Open-ReviewFile {
     }
 }
 
-function Invoke-XlCompareDiff {
+function Invoke-SvnInternalDiff {
     param([string] $OldPath, [string] $NewPath)
 
-    $xlCompare = Join-Path $env:LOCALAPPDATA "Spreadsheet Tools\xlCompare\xlCompare.exe"
-    if (!(Test-Path -LiteralPath $xlCompare -PathType Leaf)) {
-        throw "Neither an Excel workbook nor xlCompare was found."
-    }
-    & $xlCompare $OldPath $NewPath -quit_on_close -titleMine:WORKING -titleBase:BASE
+    & svn diff --internal-diff --old $OldPath --new $NewPath
     exit $LASTEXITCODE
 }
 
@@ -199,13 +195,7 @@ if ($SvnArgs.Count -lt 2) {
 $oldPath = [IO.Path]::GetFullPath($SvnArgs[-2])
 $newPath = [IO.Path]::GetFullPath($SvnArgs[-1])
 if (!(Test-ExcelWorkbook $oldPath) -or !(Test-ExcelWorkbook $newPath)) {
-    if ($Headless) {
-        [Console]::Error.WriteLine(
-            "Headless mode only handles Excel workbook families: .xlsx, .xlsm, .xlsb and .xls."
-        )
-        exit 2
-    }
-    Invoke-XlCompareDiff $oldPath $newPath
+    Invoke-SvnInternalDiff $oldPath $newPath
 }
 
 $tableCore = Get-TableCorePath

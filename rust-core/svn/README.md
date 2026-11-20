@@ -2,7 +2,7 @@
 
 包装脚本把 Subversion 和 TortoiseSVN 接到 Rust `table-core`。`.xlsx`、`.xlsm`、
 `.xlsb`、`.xls` 全部由 TableManager 自身完成表级比对与三路合并；普通文本文件仍可
-交给已安装的 xlCompare。
+使用 Subversion 内建 diff（`svn diff --internal-diff`）。
 
 以下命令以发布包解压到 `C:\Tools\table-core` 为例。
 
@@ -67,8 +67,9 @@ Merge: "C:\Tools\table-core\svn\svn-merge.cmd" %merged %theirs %mine %base
 
 ## 无头模式
 
-`svn-diff-headless.cmd` 和 `svn-merge-headless.cmd` 设置 `TM_SVN_HEADLESS=1`，
-不打开 Excel，也不回退到 xlCompare。未识别的格式会明确返回退出码 `2`。
+`svn-diff-headless.cmd` 和 `svn-merge-headless.cmd` 设置 `TM_SVN_HEADLESS=1`。
+xlsx 族仍生成 TableManager 报告；普通文本 diff 直接输出 Subversion 内建文本 diff，
+不会启动 Excel 或 xlCompare。
 
 环境变量：
 

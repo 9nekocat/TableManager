@@ -438,6 +438,47 @@ fn svn_headless_wrappers_generate_diff_and_merge_files() {
 
 #[cfg(windows)]
 #[test]
+fn svn_headless_diff_uses_internal_diff_for_text_files() {
+    let directory = std::env::current_dir()
+        .unwrap()
+        .join("target")
+        .join(format!(
+            "table-core-svn-text-diff-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+    std::fs::create_dir_all(&directory).unwrap();
+    let old_path = directory.join("old.txt");
+    let new_path = directory.join("new.txt");
+    std::fs::write(&old_path, "old value\n").unwrap();
+    std::fs::write(&new_path, "new value\n").unwrap();
+
+    let output = std::process::Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            concat!(env!("CARGO_MANIFEST_DIR"), "\\svn\\svn-diff.ps1"),
+        ])
+        .arg(&old_path)
+        .arg(&new_path)
+        .env("TM_SVN_HEADLESS", "1")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("-old value"));
+    assert!(stdout.contains("+new value"));
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+#[cfg(windows)]
+#[test]
 fn svn_merge_failure_writes_a_tip_message() {
     let directory = std::env::current_dir()
         .unwrap()
