@@ -52,7 +52,7 @@ New-Item -ItemType Directory -Path (Join-Path $stage "svn") -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $stage "config") -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $coreRoot "target\release\table-core.exe") `
     -Destination (Join-Path $stage "table-core.exe")
-Copy-Item -LiteralPath (Join-Path $coreRoot "README.md") `
+Copy-Item -LiteralPath (Join-Path (Split-Path $coreRoot -Parent) "README.markdown") `
     -Destination (Join-Path $stage "README.md")
 Copy-Item -Path (Join-Path $coreRoot "configure-svn*.bat") `
     -Destination $stage

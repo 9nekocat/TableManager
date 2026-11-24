@@ -5,10 +5,10 @@
 
 ## 1. 版本库职责
 
-- Git 只管理源码、工程规则和项目级 AI Skill：`rust-core/**`、
+- Git 管理根目录的项目说明 `README.markdown`、源码、工程规则和项目级 AI Skill：`rust-core/**`、
   `.agents/skills/tablemanager-diff-merge/**`、`.gitignore`、`AGENTS.md`。
 - SVN 只管理导出版：根目录的 `table-core.exe`、`svn/**`、`config/**`、
-  `configure-svn*.bat` 和导出用 `README.md`。
+  `configure-svn*.bat` 和导出用 `README.md`。发布脚本从 `README.markdown` 生成这份说明。
 - 禁止执行 `svn add rust-core`。`rust-core` 必须在 SVN 中保持删除或忽略状态。
 - 禁止把 `rust-core/target`、`rust-core/dist`、测试输出、日志或压缩包提交到任一仓库。
 - 根目录 `README.md`、发布二进制和 SVN 包装器由 SVN 管理。Git 中不得重新跟踪根目录
@@ -22,6 +22,7 @@
 .git
 .gitignore
 AGENTS.md
+README.markdown
 .agents
 rust-core
 target
@@ -65,10 +66,10 @@ svn/svn-merge-headless.cmd
 
 ## 3. Git 提交流程
 
-只暂存源码和工程规则：
+只暂存项目说明、源码和工程规则：
 
 ```powershell
-git add .gitignore AGENTS.md .agents/skills/tablemanager-diff-merge rust-core
+git add README.markdown .gitignore AGENTS.md .agents/skills/tablemanager-diff-merge rust-core
 git status --short
 git diff --cached --check
 git commit -m "feat: describe the completed change"
